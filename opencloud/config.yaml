@@ -1,7 +1,7 @@
 name: "OpenCloud (OCIS)"
-version: "0.0.2"          # <--- Ändere die Version auf 1.0.1, damit HA das Update erkennt!
+version: "0.0.3"        # <--- Version erhöht!
 slug: "opencloud_ocis"
-description: "Run OpenCloud Infinite Scale with Hybrid Storage (NAS/NFS) support."
+description: "Run OpenCloud Infinite Scale with Hybrid Storage (NAS/NFS)."
 url: "https://github.com/d-shmt/ha-opencloud-addon"
 arch:
   - aarch64
