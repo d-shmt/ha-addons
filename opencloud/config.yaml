@@ -1,22 +1,23 @@
-name: "OpenCloud"
-version: "1.0.0"     # <--- Das hier immer hochzählen bei Änderungen
-slug: "opencloud"
-description: "Sichere und schnelle Cloud-Lösung"
-url: "https://github.com/opencloud-eu/opencloud"
+name: "OpenCloud (OCIS)"
+version: "1.0.0"
+slug: "opencloud_ocis"
+description: "OpenCloud Infinite Scale mit Hybrid Storage (NAS Support) & Proxy Fixes."
+url: "https://github.com/d-shmt/ha-opencloud-addon"
 arch:
   - aarch64
   - amd64
 startup: application
 boot: auto
-ports:
-  9200/tcp: 9200
 map:
-  - config:rw
-  - share:rw
+  - "share:rw"     # ZWINGEND: Erlaubt Zugriff auf NAS Mounts
+ports:
+  9200/tcp: 9200   # Portfreigabe für den Proxy
 options:
+  oc_url: "https://deine-domain.de"
+  data_path: "/share/Cloud"
   admin_password: "ChangeMe123!"
-  oc_url: "https://homeassistant.local:9200"
 schema:
+  oc_url: url      # Validiert, dass es eine URL ist
+  data_path: str   # Der Pfad zum NAS
   admin_password: password
-  oc_url: str
-# image: ...  <-- ENTFERNEN, falls vorhanden!
+image: "opencloud/ocis" # Wir nutzen das offizielle Image als Basis (oder bauen selbst, siehe Dockerfile)
