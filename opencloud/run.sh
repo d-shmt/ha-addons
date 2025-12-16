@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-echo "--> Starting OpenCloud Add-on (Release v1.0.1)..."
+echo "--> Starting OpenCloud Add-on (Fixed Version)..."
 
 # --- CONFIGURATION ---
 CONFIG_PATH=/data/options.json
@@ -15,20 +15,15 @@ export OC_CONFIG_DIR="/data/config"
 
 mkdir -p $OC_BASE_DATA_PATH $OC_CONFIG_DIR
 
-# NAS Check
+# NAS Setup
 NAS_BLOBS="$NAS_PATH_VAL/blobs"
-if [ ! -d "$NAS_PATH_VAL" ]; then
-    echo "CRITICAL ERROR: The data path ($NAS_PATH_VAL) was not found!"
-    # We continue, but expect errors
-fi
-
 if [ ! -d "$NAS_BLOBS" ]; then
     echo "--> Creating blobs directory on NAS..."
     mkdir -p "$NAS_BLOBS"
 fi
 
-# Try to set permissions
-chown -R 1000:1000 "$NAS_BLOBS" || echo "WARNING: Could not set permissions on NAS (Root Squash?)"
+# Try setting permissions on NAS (ignore errors)
+chown -R 1000:1000 "$NAS_BLOBS" || true
 
 # --- ENVIRONMENT VARIABLES ---
 export OC_LOG_LEVEL="info"
@@ -41,14 +36,15 @@ export OCIS_URL="$OC_URL_VAL"
 export IDM_ADMIN_PASSWORD="$ADMIN_PASS"
 
 # --- CONFIG RESET & INIT ---
-echo "--> Refreshing OpenCloud configuration..."
+echo "--> Refreshing Config..."
 rm -f /data/config/opencloud.yaml
 
 echo "--> Initializing OpenCloud..."
+# WICHTIG: Rechte setzen
 chown -R 1000:1000 /data/data /data/config
 
-# HIER GEÄNDERT: s6-setuidgid statt su-exec
-s6-setuidgid 1000 opencloud init > /dev/null 2>&1 || true
+# WICHTIG: Der Fix! Wir nutzen 'su' statt s6-Tools
+su -s /bin/sh opencloud -c "opencloud init" > /dev/null 2>&1 || true
 
 # --- HYBRID STORAGE SYMLINK ---
 echo "--> Setting up Hybrid Storage..."
@@ -62,14 +58,13 @@ fi
 
 if [ ! -L "$LOCAL_BLOBS" ]; then
     ln -s "$NAS_BLOBS" "$LOCAL_BLOBS"
-    echo "--> Symlink created: Local -> NAS"
+    echo "--> Symlink created."
 fi
 
-# --- FINAL PERMISSIONS FIX ---
-echo "--> Fixing file permissions..."
+# Final Permissions
 chown -hR 1000:1000 /data/data /data/config
 
 # --- START SERVER ---
-echo "--> Starting OpenCloud Server..."
-# HIER GEÄNDERT: s6-setuidgid statt su-exec
-exec s6-setuidgid 1000 opencloud server
+echo "--> Starting Server..."
+# WICHTIG: Der finale Start mit 'su'
+exec su -s /bin/sh opencloud -c "opencloud server"
