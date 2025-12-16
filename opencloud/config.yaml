@@ -1,7 +1,7 @@
 name: "OpenCloud (OCIS)"
-version: "1.0.0"
+version: "1.0.1"          # <--- Ändere die Version auf 1.0.1, damit HA das Update erkennt!
 slug: "opencloud_ocis"
-description: "Run OpenCloud Infinite Scale with Hybrid Storage (NAS/NFS) support and Proxy fixes."
+description: "Run OpenCloud Infinite Scale with Hybrid Storage (NAS/NFS) support."
 url: "https://github.com/d-shmt/ha-opencloud-addon"
 arch:
   - aarch64
@@ -9,15 +9,14 @@ arch:
 startup: application
 boot: auto
 map:
-  - "share:rw"     # Mandatory: Grants access to NAS mounts
+  - "share:rw"
 ports:
-  9200/tcp: 9200   # Internal HTTP port
+  9200/tcp: 9200
 options:
-  oc_url: "https://your-domain.com"
-  data_path: "/share/OpenCloud"
+  oc_url: "https://deine-domain.de"
+  data_path: "/share/Cloud"
   admin_password: "ChangeMe123!"
 schema:
-  oc_url: url      # The public URL of your cloud
-  data_path: str   # Path to your NAS share (e.g., /share/NAS)
+  oc_url: url
+  data_path: str
   admin_password: password
-image: "opencloud/ocis"
