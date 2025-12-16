@@ -1,7 +1,7 @@
 name: "OpenCloud (OCIS)"
 version: "1.0.0"
 slug: "opencloud_ocis"
-description: "OpenCloud Infinite Scale mit Hybrid Storage (NAS Support) & Proxy Fixes."
+description: "Run OpenCloud Infinite Scale with Hybrid Storage (NAS/NFS) support and Proxy fixes."
 url: "https://github.com/d-shmt/ha-opencloud-addon"
 arch:
   - aarch64
@@ -9,15 +9,15 @@ arch:
 startup: application
 boot: auto
 map:
-  - "share:rw"     # ZWINGEND: Erlaubt Zugriff auf NAS Mounts
+  - "share:rw"     # Mandatory: Grants access to NAS mounts
 ports:
-  9200/tcp: 9200   # Portfreigabe für den Proxy
+  9200/tcp: 9200   # Internal HTTP port
 options:
-  oc_url: "https://deine-domain.de"
-  data_path: "/share/Cloud"
+  oc_url: "https://your-domain.com"
+  data_path: "/share/OpenCloud"
   admin_password: "ChangeMe123!"
 schema:
-  oc_url: url      # Validiert, dass es eine URL ist
-  data_path: str   # Der Pfad zum NAS
+  oc_url: url      # The public URL of your cloud
+  data_path: str   # Path to your NAS share (e.g., /share/NAS)
   admin_password: password
-image: "opencloud/ocis" # Wir nutzen das offizielle Image als Basis (oder bauen selbst, siehe Dockerfile)
+image: "opencloud/ocis"
