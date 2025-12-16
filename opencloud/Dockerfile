@@ -1,28 +1,24 @@
 ARG BUILD_FROM
 FROM $BUILD_FROM
 
-# Install dependencies
-# jq: JSON parsing
-# curl: Downloading binary
-# libcap: Network capabilities
-# HINWEIS: su-exec entfernt!
+# 1. Standard-Tools installieren
 RUN apk add --no-cache \
     jq \
     curl \
     libcap
 
-# Create the user 'opencloud' with ID 1000
+# 2. Den User 'opencloud' (ID 1000) sauber anlegen
 RUN addgroup -g 1000 opencloud \
     && adduser -u 1000 -G opencloud -s /bin/sh -D opencloud
 
-# OpenCloud Version
+# 3. OpenCloud Version definieren
 ENV OCIS_VERSION=5.0.0
 
-# Copy run script
+# 4. Skript kopieren
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 
-# Architecture detection & Download
+# 5. Herunterladen (mit automatischer Architektur-Erkennung)
 RUN ARCH=$(uname -m) \
     && if [ "$ARCH" = "x86_64" ]; then OCIS_ARCH="amd64"; \
        elif [ "$ARCH" = "aarch64" ]; then OCIS_ARCH="arm64"; \
