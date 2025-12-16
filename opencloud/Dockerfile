@@ -1,17 +1,17 @@
 ARG BUILD_FROM
-# Wir nutzen das offizielle Rolling-Image von Docker Hub
+# Use the official rolling image from Docker Hub
 FROM opencloudeu/opencloud-rolling:latest
 
-# Wechsel zu Root für Installationen
+# Switch to root for installations
 USER root
 
-# Installiere jq (Config lesen) und su-exec (User wechseln)
-# Wir nehmen an, das Base-Image basiert auf Alpine Linux (üblich für Go Apps)
+# Install jq (to parse config) and su-exec (to switch users)
+# We assume the base image is based on Alpine Linux (common for Go apps)
 RUN apk add --no-cache jq su-exec
 
-# Kopiere das Start-Skript
+# Copy the startup script
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 
-# WICHTIG: Wir bleiben vorerst root, der User-Wechsel passiert im run.sh
+# IMPORTANT: We remain root for now; user switching happens in run.sh
 ENTRYPOINT [ "/run.sh" ]
