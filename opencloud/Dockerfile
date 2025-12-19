@@ -1,12 +1,14 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:latest
-FROM ${BUILD_FROM}
+ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.18
+FROM $BUILD_FROM
 
-RUN apk add --no-cache bash ca-certificates
+# Installiere Abhängigkeiten (falls nötig)
+RUN apk add --no-cache curl
 
-ENV OC_DATA_DIR=/data
-ENV OC_CONFIG_DIR=/config
+# Kopiere Start-Skript
+COPY run.sh /
+RUN chmod a+x /run.sh
 
-COPY run.sh /run.sh
-RUN chmod +x /run.sh
+# OpenCloud Umgebungsvariablen vorbereiten
+ENV OCIS_INSECURE=false
 
-CMD ["/run.sh"]
+CMD [ "/run.sh" ]
