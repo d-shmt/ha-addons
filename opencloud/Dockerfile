@@ -1,20 +1,19 @@
-# Verwende das offizielle OpenCloud Rolling Image von Docker Hub
-ARG BUILD_FROM=opencloudeu/opencloud-rolling:latest
-FROM $BUILD_FROM
+# Wir nutzen das offizielle Image als Basis
+FROM opencloudeu/opencloud:latest
 
-# Installiere bashio für Home Assistant Integration
-RUN apk add --no-cache bash jq
+# Root-User ist nötig, um Pakete zu installieren und Berechtigungen zu setzen
+USER root
 
-# Kopiere das Start-Script
-COPY run.sh /
+# Installation von Bash und jq (für das Parsing der config)
+# Da das Base-Image auf Alpine basiert, nutzen wir apk
+RUN apk add --no-cache bash jq coreutils
+
+# Kopieren des Start-Skripts
+COPY run.sh /run.sh
 RUN chmod a+x /run.sh
 
-# Port freigeben
-EXPOSE 9200
+# Environment Variablen für Home Assistant Pfade
+ENV CONFIG_PATH=/data/options.json
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl -f http://localhost:9200/ || exit 1
-
-# Start script
-CMD ["/run.sh"]
+# Startbefehl
+CMD [ "/run.sh" ]
