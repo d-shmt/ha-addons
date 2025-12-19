@@ -11,37 +11,41 @@ echo "--> Configuration loaded:"
 echo "    Domain: $DOMAIN"
 echo "    Storage: $STORAGE_PATH"
 
-# 2. SICHERHEITS-CHECK: Prüfen, ob der Speicherpfad existiert
-# Wenn nicht: ABBRUCH!
+# 2. SICHERHEITS-CHECK: Speicherpfad
 if [ ! -d "$STORAGE_PATH" ]; then
     echo "------------------------------------------------------------"
     echo "CRITICAL ERROR: Storage path NOT found!"
     echo "Path: $STORAGE_PATH"
-    echo ""
-    echo "Possible reasons:"
-    echo "1. The NFS Share is not mounted in Home Assistant (Settings -> System -> Storage)."
-    echo "2. The path in the add-on configuration is incorrect."
-    echo ""
-    echo "Aborting start to prevent data loss or writing to local disk."
+    echo "Aborting start to prevent data loss."
     echo "------------------------------------------------------------"
     exit 1
 fi
 
-echo "--> Storage path found. Proceeding..."
+# 3. JWT SECRET MANAGMENT (Fix für den Fehler)
+# Wir brauchen ein persistentes Secret für die interne Kommunikation
+JWT_SECRET_FILE="/data/oc_jwt_secret"
 
-# 3. Environment Variablen für OpenCloud setzen
+if [ ! -f "$JWT_SECRET_FILE" ]; then
+    echo "--> No JWT secret found. Generating a new one..."
+    # Erzeugt einen 32-Zeichen zufälligen String
+    tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$JWT_SECRET_FILE"
+fi
+
+# Secret in Variable laden
+export OC_JWT_SECRET=$(cat "$JWT_SECRET_FILE")
+
+
+# 4. Environment Variablen für OpenCloud setzen
 export OC_SERVER_ROOT="/data"
 export OC_SERVER_ADDRESS="0.0.0.0"
 export OC_SERVER_PORT="9200"
 export OC_URL="https://$DOMAIN"
 export OC_INSECURE="true"
-
-# Speicherort für die User-Daten (NFS Share)
 export OC_STORAGE_LOCAL_ROOT="$STORAGE_PATH"
-
-# Home Verzeichnis für OpenCloud interne Daten (DBs, Configs)
-# Diese bleiben lokal im Container-Volume (/data), damit das Add-on schnell bleibt
 export OC_BASE_DATA_PATH="/data"
+
+# Explizit den Pfad zur Config Datei setzen, damit er sie sicher findet
+export OC_CONFIG_FILE="/data/opencloud.yaml"
 
 echo "--> Checking/Initializing OpenCloud configuration..."
 # Init, falls noch keine Config existiert
@@ -53,5 +57,5 @@ fi
 echo "--> Starting OpenCloud Server..."
 echo "------------------------------------------------"
 
-# Starten der Anwendung im Server-Modus
+# Starten
 exec opencloud server
