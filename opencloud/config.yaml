@@ -1,5 +1,5 @@
 name: "OpenCloud"
-version: "1.0.2"
+version: "1.0.3"
 slug: "opencloud"
 description: "OpenCloud mit Hybrid-Storage (Config intern, Daten auf NAS)"
 url: "https://github.com/opencloud-eu/opencloud"
