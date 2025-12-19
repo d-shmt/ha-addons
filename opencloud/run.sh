@@ -53,14 +53,32 @@ if [ ! -f "$MACHINE_AUTH_FILE" ]; then
 fi
 export OC_MACHINE_AUTH_API_KEY=$(cat "$MACHINE_AUTH_FILE")
 
-# --- D) SYSTEM USER ID (Neu) ---
-# OpenCloud benötigt eine feste UUID für den System-User
+# --- D) SYSTEM USER ID ---
 SYSTEM_USER_ID_FILE="/data/oc_system_user_id"
 if [ ! -f "$SYSTEM_USER_ID_FILE" ]; then
     log "--> Generating new System User UUID..."
     cat /proc/sys/kernel/random/uuid > "$SYSTEM_USER_ID_FILE"
 fi
 export OC_SYSTEM_USER_ID=$(cat "$SYSTEM_USER_ID_FILE")
+
+# --- E) STORAGE MOUNT IDs (Neu) ---
+# Damit Gateway und Storage Service wissen, wo die Daten liegen.
+
+# 1. Users Mount ID (Fix für aktuellen Fehler)
+USERS_MOUNT_ID_FILE="/data/oc_storage_users_mount_id"
+if [ ! -f "$USERS_MOUNT_ID_FILE" ]; then
+    log "--> Generating new Storage Users Mount ID..."
+    cat /proc/sys/kernel/random/uuid > "$USERS_MOUNT_ID_FILE"
+fi
+export OC_STORAGE_USERS_MOUNT_ID=$(cat "$USERS_MOUNT_ID_FILE")
+
+# 2. System Mount ID (Prophylaktisch)
+SYSTEM_MOUNT_ID_FILE="/data/oc_storage_system_mount_id"
+if [ ! -f "$SYSTEM_MOUNT_ID_FILE" ]; then
+    log "--> Generating new Storage System Mount ID..."
+    cat /proc/sys/kernel/random/uuid > "$SYSTEM_MOUNT_ID_FILE"
+fi
+export OC_STORAGE_SYSTEM_MOUNT_ID=$(cat "$SYSTEM_MOUNT_ID_FILE")
 
 
 # 4. Environment Variablen setzen
