@@ -71,9 +71,7 @@ fi
 export OC_ADMIN_USER_ID=$(cat "$ADMIN_USER_ID_FILE" | tr -d '[:space:]')
 
 
-# --- E) STORAGE MOUNT IDs (Die "Schrotflinte") ---
-# Wir verteilen die IDs an ALLE Services, die sie brauchen könnten.
-
+# --- E) STORAGE MOUNT IDs ---
 # 1. Users Mount ID
 USERS_MOUNT_ID_FILE="/data/oc_storage_users_mount_id"
 if [ ! -f "$USERS_MOUNT_ID_FILE" ]; then
@@ -82,15 +80,14 @@ if [ ! -f "$USERS_MOUNT_ID_FILE" ]; then
 fi
 MOUNT_ID_USERS=$(cat "$USERS_MOUNT_ID_FILE" | tr -d '[:space:]')
 
-# GLOBAL setting
+# Global & Explicit Overrides
 export OC_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-# Explicit Service Overrides
 export OC_GATEWAY_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 export OC_WEBDAV_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 export OC_FRONTEND_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 export OC_STORAGE_PUBLICLINK_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 export OC_STORAGE_SHARES_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-
+export OC_USERS_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 
 # 2. System Mount ID
 SYSTEM_MOUNT_ID_FILE="/data/oc_storage_system_mount_id"
@@ -100,9 +97,8 @@ if [ ! -f "$SYSTEM_MOUNT_ID_FILE" ]; then
 fi
 MOUNT_ID_SYSTEM=$(cat "$SYSTEM_MOUNT_ID_FILE" | tr -d '[:space:]')
 
-# GLOBAL setting
+# Global & Explicit Overrides
 export OC_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
-# Explicit Service Overrides
 export OC_GATEWAY_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
 
 
@@ -116,16 +112,22 @@ export OC_STORAGE_LOCAL_ROOT="$STORAGE_PATH"
 export OC_BASE_DATA_PATH="/data"
 export OC_CONFIG_FILE="/data/opencloud.yaml"
 
-# Setzen des Admin-Passworts via Env-Var, falls Config Init dies braucht
-# (Dies verhindert Probleme, falls Init nicht läuft)
-if [ -f "/data/opencloud.yaml" ]; then
-    log "--> Config found. Skipping initialization."
-else
+log "--> Checking/Initializing OpenCloud configuration..."
+
+# Init, falls noch keine Config existiert
+if [ ! -f "/data/opencloud.yaml" ]; then
     log "--> No config found. Initializing..."
-    log "--> Please wait..."
-    # Wir führen init aus, lassen aber unsere Env-Vars gewinnen
     opencloud init || true
+else
+    log "--> Config found. Skipping initialization."
 fi
+
+# --- F) CONFIG CLEANUP (WICHTIG!) ---
+# Wir löschen die Zeilen mit den Mount-IDs aus der Config-Datei.
+# Das zwingt OpenCloud, unsere Environment-Variablen zu nutzen.
+log "--> Patching config file to force usage of ENV variables..."
+sed -i '/storage_users_mount_id/d' /data/opencloud.yaml
+sed -i '/storage_system_mount_id/d' /data/opencloud.yaml
 
 log "--> Starting OpenCloud Server..."
 echo "------------------------------------------------"
