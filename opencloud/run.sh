@@ -1,51 +1,39 @@
-#!/usr/bin/with-contenv bashio
-
+#!/bin/bash
 set -e
 
-# Read configuration from Home Assistant
-DOMAIN=$(bashio::config 'domain')
-DATA_PATH=$(bashio::config 'data_path')
-CONFIG_PATH=$(bashio::config 'config_path')
-ADMIN_PASSWORD=$(bashio::config 'admin_password')
-LOG_LEVEL=$(bashio::config 'log_level')
+echo "--> Starting OpenCloud Add-on Setup..."
 
-# Log configuration
-bashio::log.info "Starting OpenCloud..."
-bashio::log.info "Domain: ${DOMAIN}"
-bashio::log.info "Data path: ${DATA_PATH}"
-bashio::log.info "Config path: ${CONFIG_PATH}"
+# 1. Konfiguration auslesen
+# Wir lesen die Werte, die der User in HA eingestellt hat
+DOMAIN=$(jq --raw-output '.domain' $CONFIG_PATH)
+STORAGE_PATH=$(jq --raw-output '.storage_path' $CONFIG_PATH)
 
-# Validate configuration
-if bashio::var.is_empty "${ADMIN_PASSWORD}"; then
-    bashio::exit.nok "Admin password is required!"
+echo "--> Configuration loaded:"
+echo "    Domain: $DOMAIN"
+echo "    Storage: $STORAGE_PATH"
+
+# 2. Prüfen, ob der Speicherpfad existiert
+if [ ! -d "$STORAGE_PATH" ]; then
+    echo "--> WARNING: Storage path $STORAGE_PATH does not exist!"
+    echo "--> Creating it now..."
+    mkdir -p "$STORAGE_PATH"
 fi
 
-# Create directories if they don't exist
-mkdir -p "${DATA_PATH}"
-mkdir -p "${CONFIG_PATH}"
+# 3. Environment Variablen für OpenCloud setzen
+# Wir nutzen die Config von HA (/data), damit Einstellungen erhalten bleiben
+export OC_SERVER_ROOT="/data"
+export OC_SERVER_ADDRESS="0.0.0.0"
+export OC_SERVER_PORT="9200"
+export OC_SERVER_URL="https://$DOMAIN"
+export OC_INSECURE="true" # Wichtig für Pangolin (SSL offloading)
 
-# Check if NFS paths are accessible
-if [ ! -d "${DATA_PATH}" ]; then
-    bashio::exit.nok "Data path ${DATA_PATH} is not accessible. Please check your NFS mount."
-fi
+# Speicherort für die Dateien setzen (NFS Share)
+# OpenCloud nutzt standardmäßig 'local' storage driver. Wir biegen das Root-Verzeichnis um.
+export OC_STORAGE_LOCAL_ROOT="$STORAGE_PATH"
 
-if [ ! -d "${CONFIG_PATH}" ]; then
-    bashio::exit.nok "Config path ${CONFIG_PATH} is not accessible. Please check your NFS mount."
-fi
+echo "--> Starting OpenCloud..."
+echo "------------------------------------------------"
 
-# Set environment variables for OpenCloud
-export OC_INSECURE=false
-export PROXY_HTTP_ADDR=0.0.0.0:9200
-export OC_URL=https://${DOMAIN}
-export OC_LOG_LEVEL=${LOG_LEVEL}
-export IDM_ADMIN_PASSWORD=${ADMIN_PASSWORD}
-export IDM_CREATE_DEMO_USERS=false
-
-# Change to config directory
-cd "${CONFIG_PATH}"
-
-bashio::log.info "Initializing OpenCloud (if needed)..."
-
-# Run OpenCloud init and then start server
-# The init will only run if config doesn't exist yet
-exec /bin/sh -c "opencloud init || true; opencloud server"
+# Starten der Anwendung (als der User, der im Original-Image definiert ist, oder root)
+# Da wir im Dockerfile root sind, starten wir es einfach.
+exec /opencloud
