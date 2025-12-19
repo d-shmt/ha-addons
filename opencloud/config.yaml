@@ -1,7 +1,7 @@
 name: "OpenCloud"
-version: "1.0.1"  # Version hochzählen!
+version: "1.0.2"
 slug: "opencloud"
-description: "Sichere und schnelle Cloud-Lösung"
+description: "OpenCloud mit Hybrid-Storage (Config intern, Daten auf NAS)"
 url: "https://github.com/opencloud-eu/opencloud"
 arch:
   - aarch64
@@ -11,14 +11,13 @@ boot: auto
 ports:
   9200/tcp: 9200
 map:
-  - config:rw
-  - share:rw    # <--- WICHTIG: Das erlaubt Zugriff auf das NAS (wenn als "Share" gemountet)
-  - media:rw    # Optional, falls du es als "Medien" gemountet hast
+  - config:rw   # Optional, falls du Configs manuell debuggen willst
+  - share:rw    # ZWINGEND: Zugriff auf /share für das NAS
 options:
   admin_password: "ChangeMe123!"
-  oc_url: "https://cloud.datoh.de"
-  data_path: "/share/Cloud"  # Standard: Intern
+  oc_url: "https://cloud.deine-domain.de"
+  data_path: "/share/Cloud" 
 schema:
   admin_password: password
   oc_url: str
-  data_path: str           # Der User kann hier einen Pfad eintragen
+  data_path: str
