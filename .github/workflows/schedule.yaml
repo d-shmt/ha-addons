@@ -1,4 +1,0 @@
-#.github/workflows/schedule.yaml
-on:
-  schedule:
-    - cron: '0 3 * * 0' # Jeden Sonntag um 3 Uhr
