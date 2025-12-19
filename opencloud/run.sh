@@ -1,73 +1,69 @@
 #!/bin/sh
 set -e
 
-echo "--> Starte OpenCloud (Force-NAS Mode)..."
+echo "--> Starte OpenCloud (Direct NFS Mode)..."
 
 # --- CONFIG ---
 CONFIG_PATH=/data/options.json
 ADMIN_PASS=$(jq --raw-output '.admin_password' $CONFIG_PATH)
 OC_URL_VAL=$(jq --raw-output '.oc_url' $CONFIG_PATH)
-NAS_PATH_VAL=$(jq --raw-output '.data_path' $CONFIG_PATH)
+# Das ist jetzt der String: "192.168.x.x:/Pfad/..."
+NFS_TARGET=$(jq --raw-output '.nfs_path' $CONFIG_PATH)
 
 # --- PFADE ---
 export OC_CONFIG_DIR="/data/config"
 export OC_BASE_DATA_PATH="/data/data"
-NAS_BLOBS="$NAS_PATH_VAL/blobs"
 
-# --- 1. NAS CHECK ---
-if [ ! -d "$NAS_PATH_VAL" ]; then
-    echo "FEHLER: NAS-Pfad $NAS_PATH_VAL nicht gefunden!"
-    exit 1
-fi
-
-# NAS-Ordner erstellen (falls fehlt)
-# Wir verlassen uns auf dein 'chmod 777' auf dem Host!
-if [ ! -d "$NAS_BLOBS" ]; then
-    echo "--> Erstelle NAS-Ordner..."
-    mkdir -p "$NAS_BLOBS"
-fi
-
-# --- 2. LOKALE STRUKTUR VORBEREITEN ---
-echo "--> Bereite lokale Pfade vor..."
-# Wir erstellen den Eltern-Ordner manuell, damit wir den Link reinlegen können
+# Zielordner im Container (wo die Blobs hinsollen)
 LOCAL_STORAGE_USERS="$OC_BASE_DATA_PATH/storage/users"
-LOCAL_BLOBS="$LOCAL_STORAGE_USERS/blobs"
+MOUNT_POINT="$LOCAL_STORAGE_USERS/blobs"
 
+# --- STRUKTUR ---
 mkdir -p "$OC_CONFIG_DIR"
-mkdir -p "$LOCAL_STORAGE_USERS" # Wichtig: Nur bis 'users' erstellen!
+mkdir -p "$LOCAL_STORAGE_USERS"
 
-# --- 3. SYMLINK ERZWINGEN (DER FIX) ---
-# Wir prüfen: Ist dort ein Ordner, der KEIN Link ist? -> Weg damit!
-if [ -d "$LOCAL_BLOBS" ] && [ ! -L "$LOCAL_BLOBS" ]; then
-    echo "ACHTUNG: Lokaler Blobs-Ordner entdeckt. Lösche ihn, um NAS zu erzwingen..."
-    rm -rf "$LOCAL_BLOBS"
+# Wichtig: Für einen Mount muss der Zielordner existieren (und leer sein)
+if [ ! -d "$MOUNT_POINT" ]; then
+    mkdir -p "$MOUNT_POINT"
 fi
 
-# Link erstellen, falls nicht vorhanden
-if [ ! -L "$LOCAL_BLOBS" ]; then
-    echo "--> Erstelle Symlink: Intern -> NAS..."
-    ln -s "$NAS_BLOBS" "$LOCAL_BLOBS"
+# --- MOUNT LOGIK ---
+echo "--> Versuche direkten NFS Mount..."
+echo "--> Quelle: $NFS_TARGET"
+echo "--> Ziel:   $MOUNT_POINT"
+
+# Mounten mit 'nolock' (wichtig für Container) und 'vers=4' (falls Proxmox v4 kann, sonst weglassen)
+# Wir fangen Fehler ab, falls es schon gemountet ist
+mount -t nfs -o rw,nolock,async "$NFS_TARGET" "$MOUNT_POINT" || echo "WARNUNG: Mount fehlgeschlagen oder bereits aktiv."
+
+# Check ob Mount wirklich da ist
+if mount | grep -q "$MOUNT_POINT"; then
+    echo "--> ERFOLG: NFS Share ist gemountet!"
 else
-    echo "--> Symlink ist bereits korrekt gesetzt."
+    echo "FEHLER: Konnte NFS Share nicht mounten. Bitte Log prüfen."
+    # Wir machen hier keinen exit 1, sondern versuchen es trotzdem - vielleicht klappt der Start
 fi
 
-# WICHTIG: Rechte des Links (nicht des Ziels) anpassen
-chown -h 1000:1000 "$LOCAL_BLOBS"
-# Rechte für den Rest lokal setzen
+# --- RECHTE FIXEN ---
+# Jetzt, wo das NAS eingehängt ist, gehören die Ordner evtl. root.
+# Wir versuchen, sie für opencloud (1000) lesbar zu machen.
+# Das klappt nur, wenn Proxmox (wie vorhin besprochen) 'all_squash' oder 'chmod 777' hat.
+echo "--> Passe Rechte auf dem Mount an..."
+chown -R 1000:1000 "$MOUNT_POINT" || echo "Info: Konnte Rechte auf Mount nicht ändern (bei NFS oft normal)."
+
+# Lokale Config Rechte
 chown -R 1000:1000 /data/data /data/config
 
-# --- 4. ENV & START ---
+# --- ENV & START ---
 export OC_INSECURE=true
 export PROXY_TLS=false
 export PROXY_HTTP_ADDR="0.0.0.0:9200"
 export IDM_ADMIN_PASSWORD="$ADMIN_PASS"
 export OC_URL="$OC_URL_VAL"
-# Explizite Pfade für OCIS
 export OC_CONFIG_DIR=$OC_CONFIG_DIR
 export OC_BASE_DATA_PATH=$OC_BASE_DATA_PATH
 
 echo "--> Initialisiere OpenCloud..."
-# Jetzt darf init laufen - es wird den Symlink finden und nutzen!
 su-exec 1000:1000 opencloud init || true
 
 echo "--> Starte Server..."
