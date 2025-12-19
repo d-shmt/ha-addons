@@ -1,110 +1,106 @@
-#!/bin/bash
+#!/bin/sh
 set -e
 
-# Funktion für Log-Ausgaben
+# Helper Funktion für Logs mit Zeitstempel
 log() {
     echo "[$(date '+%H:%M:%S')] $1"
 }
 
-log "--> Starting OpenCloud Add-on Setup..."
+log "--> Starte OpenCloud Add-on Setup (Hybrid Mode)..."
 
-# 1. Konfiguration auslesen
-DOMAIN=$(jq --raw-output '.domain' $CONFIG_PATH)
-STORAGE_PATH=$(jq --raw-output '.storage_path' $CONFIG_PATH)
+# --- 1. CONFIG LESEN ---
+CONFIG_PATH=/data/options.json
+ADMIN_PASS=$(jq --raw-output '.admin_password' $CONFIG_PATH)
+OC_URL_VAL=$(jq --raw-output '.oc_url' $CONFIG_PATH)
+NAS_PATH_VAL=$(jq --raw-output '.data_path' $CONFIG_PATH)
 
-log "--> Configuration loaded:"
-log "    Domain: $DOMAIN"
-log "    NAS Data Path: $STORAGE_PATH"
-log "    Local Config Path: /data/config"
+log "--> Einstellungen geladen:"
+log "    URL: $OC_URL_VAL"
+log "    NAS Pfad: $NAS_PATH_VAL"
 
-# 2. SICHERHEITS-CHECK: NAS Mount
-if [ ! -d "$STORAGE_PATH" ]; then
-    log "CRITICAL ERROR: Storage path $STORAGE_PATH NOT found!"
-    log "Please ensure the NAS is mounted in Home Assistant."
+# --- 2. VALIDIERUNG ---
+if [ ! -d "$NAS_PATH_VAL" ]; then
+    log "CRITICAL ERROR: Der Pfad $NAS_PATH_VAL existiert nicht!"
+    log "Bitte sicherstellen, dass das NAS in HA gemountet ist."
     exit 1
 fi
 
-# 3. VERZEICHNISSTRUKTUR VORBEREITEN
-# Config Ordner auf HA-Disk anlegen (Persistent)
-mkdir -p /data/config
-# Data Ordner auf NAS anlegen (falls noch nicht da)
-mkdir -p "$STORAGE_PATH"
+# --- 3. UMGEBUNGSVARIABLEN SETZEN ---
+# Pfade intern (Lokal auf SSD für Performance)
+export OC_BASE_DATA_PATH="/data/data"
+export OC_CONFIG_DIR="/data/config"
 
-# 4. ENVIRONMENT VARIABLEN
-export OC_SERVER_ADDRESS="0.0.0.0"
-export OC_SERVER_PORT="9200"
-export OC_URL="https://$DOMAIN"
-export OC_INSECURE="true"
+# Netzwerk & Proxy (Pangolin Setup)
+export OC_INSECURE=true
+export PROXY_TLS=false
+export PROXY_HTTP_ADDR="0.0.0.0:9200"
+export OC_URL="$OC_URL_VAL"
+# Vertraue allen internen Netzen (Docker, LAN, Localhost) für Proxy-Header
+export PROXY_TRUSTED_PROXIES="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1"
 
-# WICHTIG: Wir sagen OpenCloud, wo die Basis-Daten liegen sollen (NAS)
-# Damit umgehen wir das Löschen von /var/lib/opencloud
-export OC_BASE_DATA_PATH="$STORAGE_PATH"
+# Admin User (wird beim init verwendet)
+export IDM_ADMIN_PASSWORD="$ADMIN_PASS"
 
-# Wir definieren, wo die Config liegen soll (für init)
-export OC_CONFIG_FILE="/data/config/opencloud.yaml"
+# --- 4. ORDNER VORBEREITEN ---
+log "--> Bereite lokale Ordner vor..."
+mkdir -p "$OC_BASE_DATA_PATH"
+mkdir -p "$OC_CONFIG_DIR"
 
-# 5. INITIALISIERUNG
-if [ -f "/data/config/opencloud.yaml" ]; then
-    log "--> Config found in /data/config. Skipping init."
-else
-    log "--> No config found. Initializing..."
-    # Init schreibt nach /data/config/opencloud.yaml
-    opencloud init || true
+# NAS Ordner für die großen Dateien (Blobs)
+NAS_BLOBS="$NAS_PATH_VAL/blobs"
+if [ ! -d "$NAS_BLOBS" ]; then
+    log "--> Erstelle Blobs-Ordner auf dem NAS..."
+    mkdir -p "$NAS_BLOBS"
 fi
 
-# 6. SYMLINK FIX (Das löst den "Resource busy" Fehler)
-# Wir löschen den Ordner NICHT. Wir verlinken nur die Config-Datei hinein.
-log "--> Linking config file to /etc/opencloud/opencloud.yaml..."
+# Rechte setzen (Wir sind aktuell noch root)
+# Wir versuchen das NAS auf 1000 zu setzen. Wenn das NFS das blockt (Root Squash),
+# ignorieren wir den Fehler mit '|| true', hoffen aber, dass User 1000 schreiben darf.
+chown -R 1000:1000 "$OC_BASE_DATA_PATH" "$OC_CONFIG_DIR"
+chown -R 1000:1000 "$NAS_BLOBS" || true
 
-# Sicherstellen, dass der Zielordner existiert (sollte er aber, da er busy war)
-mkdir -p /etc/opencloud
-
-# Symlink erzwingen (-f force), überschreibt existierende Datei im Container
-ln -sf /data/config/opencloud.yaml /etc/opencloud/opencloud.yaml
-
-
-# 7. CONFIG PATCHING (Mount IDs Fix)
-# Wir patchen die Datei in /data/config, der Link in /etc übernimmt das automatisch.
-CONFIG_FILE="/data/config/opencloud.yaml"
-
-if ! grep -q "storage_users_mount_id:" "$CONFIG_FILE"; then
-    log "--> Patching config: Appending missing Mount IDs..."
-    
-    MOUNT_ID_USERS="a0000000-0000-0000-0000-000000000001"
-    MOUNT_ID_SYSTEM="a0000000-0000-0000-0000-000000000002"
-
-    cat >> "$CONFIG_FILE" <<EOF
-
-# --- Added by Home Assistant Add-on ---
-storage_users_mount_id: "$MOUNT_ID_USERS"
-storage_system_mount_id: "$MOUNT_ID_SYSTEM"
-
-gateway:
-  storage_users_mount_id: "$MOUNT_ID_USERS"
-  storage_system_mount_id: "$MOUNT_ID_SYSTEM"
-
-frontend:
-  storage_users_mount_id: "$MOUNT_ID_USERS"
-
-webdav:
-  storage_users_mount_id: "$MOUNT_ID_USERS"
-
-storage_users:
-  mount_id: "$MOUNT_ID_USERS"
-
-storage_system:
-  mount_id: "$MOUNT_ID_SYSTEM"
-# --------------------------------------
-EOF
-    log "--> Config patched successfully."
+# --- 5. INITIALISIERUNG ---
+if [ ! -f "$OC_CONFIG_DIR/opencloud.yaml" ]; then
+    log "--> Keine Config gefunden. Führe 'opencloud init' aus..."
+    # Wir führen init als User 1000 aus!
+    su-exec 1000:1000 opencloud init
 else
-    log "--> Config already contains Mount IDs."
+    log "--> Config existiert bereits."
 fi
 
-log "--> Starting OpenCloud Server..."
+# --- 6. DER STORAGE-HACK (Symlink) ---
+# OpenCloud speichert Dateien standardmäßig unter: $OC_BASE_DATA_PATH/storage/users/blobs
+# Wir biegen diesen 'blobs' Ordner auf das NAS um.
+
+INTERNAL_STORAGE_ROOT="$OC_BASE_DATA_PATH/storage/users"
+INTERNAL_BLOBS_LINK="$INTERNAL_STORAGE_ROOT/blobs"
+
+log "--> Konfiguriere Hybrid-Storage..."
+
+# Stelle sicher, dass der Eltern-Ordner existiert (wichtig beim ersten Start!)
+mkdir -p "$INTERNAL_STORAGE_ROOT"
+chown 1000:1000 "$INTERNAL_STORAGE_ROOT"
+
+# Prüfen, ob dort schon ein 'echter' Ordner ist (falsch) oder ein Link (richtig)
+if [ -d "$INTERNAL_BLOBS_LINK" ] && [ ! -L "$INTERNAL_BLOBS_LINK" ]; then
+    log "WARNUNG: Lokaler Blobs-Ordner gefunden. Lösche ihn, um Platz für Symlink zu machen..."
+    # Vorsicht: Das löscht Daten, die versehentlich lokal gelandet sind!
+    rm -rf "$INTERNAL_BLOBS_LINK"
+fi
+
+# Symlink erstellen, falls noch nicht da
+if [ ! -L "$INTERNAL_BLOBS_LINK" ]; then
+    log "--> Erstelle Symlink: Lokal -> NAS"
+    ln -s "$NAS_BLOBS" "$INTERNAL_BLOBS_LINK"
+    # Eigentümer des Links anpassen (User 1000)
+    chown -h 1000:1000 "$INTERNAL_BLOBS_LINK"
+else
+    log "--> Symlink zum NAS ist bereits aktiv."
+fi
+
+# --- 7. START ---
+log "--> Starte OpenCloud Server..."
 echo "------------------------------------------------"
 
-# Starten
-# Da die Datei jetzt in /etc/opencloud/opencloud.yaml verlinkt ist,
-# findet der Server sie automatisch.
-exec opencloud server
+# Start als User 1000
+exec su-exec 1000:1000 opencloud server
