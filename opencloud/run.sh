@@ -38,7 +38,7 @@ export OC_URL="$OC_URL_VAL"
 export PROXY_TRUSTED_PROXIES="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1"
 
 # DEBUG LOGGING (Neu!)
-export OC_LOG_LEVEL="debug"
+export OC_LOG_LEVEL="info"
 export OC_LOG_COLOR="false"
 export OC_LOG_PRETTY="false"
 
