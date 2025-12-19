@@ -13,6 +13,10 @@ ports:
 map:
   - config:rw   # Optional, falls du Configs manuell debuggen willst
   - share:rw    # ZWINGEND: Zugriff auf /share für das NAS
+privileged:
+  - NET_ADMIN
+  - SYS_ADMIN
+  - DAC_READ_SEARCH
 options:
   admin_password: "ChangeMe123!"
   oc_url: "https://cloud.deine-domain.de"
