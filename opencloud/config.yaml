@@ -1,7 +1,7 @@
 name: "OpenCloud"
-version: "1.0.6"
+version: "1.0.7" # Version hochzählen erzwingt Update
 slug: "opencloud"
-description: "OpenCloud mit Hybrid-Storage (Config intern, Daten auf NAS)"
+description: "OpenCloud via NFS"
 url: "https://github.com/opencloud-eu/opencloud"
 arch:
   - aarch64
@@ -11,17 +11,20 @@ boot: auto
 ports:
   9200/tcp: 9200
 map:
-  - config:rw   # Optional, falls du Configs manuell debuggen willst
-  - share:rw    # ZWINGEND: Zugriff auf /share für das NAS
+  - config:rw
+  - share:rw
+
+# DIESER BLOCK IST ENTSCHEIDEND FÜR NFS MOUNT:
 privileged:
   - NET_ADMIN
   - SYS_ADMIN
   - DAC_READ_SEARCH
+
 options:
   admin_password: "ChangeMe123!"
   oc_url: "https://cloud.deine-domain.de"
-  data_path: "/share/Cloud" 
+  data_path: "10.0.0.100:/HDD/opencloud-data/blobs" # Standard-Beispiel
 schema:
   admin_password: password
   oc_url: str
-  data_path: str
+  data_path: str # Wir nutzen weiter data_path
