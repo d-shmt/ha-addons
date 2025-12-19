@@ -1,16 +1,20 @@
-# Nutze das offizielle OpenCloud Image
-FROM opencloud/ocis:latest
+# Verwende das offizielle OpenCloud Rolling Image von Docker Hub
+ARG BUILD_FROM=opencloudeu/opencloud-rolling:latest
+FROM $BUILD_FROM
 
-# Installiere Bash und Curl für das HA-Ökosystem
-USER root
-RUN apk add --no-cache bash curl jq
+# Installiere bashio für Home Assistant Integration
+RUN apk add --no-cache bash jq
 
-# Kopiere HA-spezifische Hilfsmittel (bashio)
-# Wir simulieren hier die HA-Umgebung
+# Kopiere das Start-Script
 COPY run.sh /
 RUN chmod a+x /run.sh
 
-# OpenCloud Standard-Ports
+# Port freigeben
 EXPOSE 9200
 
-ENTRYPOINT [ "/bin/bash", "/run.sh" ]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:9200/ || exit 1
+
+# Start script
+CMD ["/run.sh"]
