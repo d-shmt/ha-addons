@@ -1,24 +1,36 @@
-#!/usr/bin/with-contenv bashio
+#!/bin/bash
 
-# HA Optionen auslesen
-DOMAIN=$(bashio::config 'domain')
-ADMIN_PASSWORD=$(bashio::config 'admin_password')
+# Pfad zur HA Config-Datei (wird von HA unter /data/options.json abgelegt)
+CONFIG_PATH=/data/options.json
 
-bashio::log.info "Starte OpenCloud für Domain: ${DOMAIN}"
+# Werte mit jq extrahieren (da wir im offiziellen Image kein volles bashio haben)
+DOMAIN=$(jq --raw-output '.domain' $CONFIG_PATH)
+ADMIN_PASSWORD=$(jq --raw-output '.admin_password' $CONFIG_PATH)
 
-# Verzeichnisse auf dem NFS-Share vorbereiten
+echo "[INFO] Starte OpenCloud für Domain: ${DOMAIN}"
+
+# Verzeichnisse auf dem NFS-Share (HA /share ist gemountet)
 export OCIS_BASE_DATA_PATH="/share/opencloud/data"
 export OCIS_CONFIG_DIR="/share/opencloud/config"
 mkdir -p $OCIS_BASE_DATA_PATH $OCIS_CONFIG_DIR
 
-# Konfiguration für Reverse Proxy (Pangolin)
+# --- OpenCloud Konfiguration ---
 export OCIS_URL="https://${DOMAIN}"
-export PROXY_TLS=false # Da Pangolin TLS übernimmt
-export OCIS_INSECURE=true # Intern unverschlüsselt, Pangolin macht HTTPS
+export OCIS_LOG_LEVEL=info
 
-# Admin Passwort setzen (nur beim ersten Start relevant)
+# Wichtig für Pangolin/Reverse Proxy
+export PROXY_TLS=false
+export OCIS_INSECURE=true
+export PROXY_HTTP_ADDR=0.0.0.0:9200
+
+# Admin Setup
 export IDM_ADMIN_PASSWORD=$ADMIN_PASSWORD
 
-# OpenCloud starten (Hier nutzen wir das Binary aus dem Image)
-# Hinweis: Je nach Image-Pfad anpassen
-exec /usr/bin/ocis server
+# Initiale Konfiguration erstellen, falls nicht vorhanden
+if [ ! -f "$OCIS_CONFIG_DIR/ocis.yaml" ]; then
+    echo "[INFO] Erstelle Initial-Konfiguration..."
+    ocis init --insecure true
+fi
+
+# OpenCloud starten
+exec ocis server
