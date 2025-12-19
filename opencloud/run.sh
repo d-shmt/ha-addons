@@ -1,73 +1,50 @@
 #!/bin/sh
-set -e
 
-echo "--> Starte OpenCloud Add-on (Deep-Link Fix)..."
+# 1. Konfiguration auslesen
+# Wir lesen das Passwort und den gewünschten Datenpfad aus
+ADMIN_PASS=$(grep -o '"admin_password": "[^"]*' /data/options.json | sed 's/"admin_password": "//')
+DATA_PATH=$(grep -o '"data_path": "[^"]*' /data/options.json | sed 's/"data_path": "//')
 
-# --- CONFIG ---
-CONFIG_PATH=/data/options.json
-ADMIN_PASS=$(jq --raw-output '.admin_password' $CONFIG_PATH)
-OC_URL_VAL=$(jq --raw-output '.oc_url' $CONFIG_PATH)
-NAS_PATH_VAL=$(jq --raw-output '.data_path' $CONFIG_PATH)
-
-if [ ! -d "$NAS_PATH_VAL" ]; then
-    echo "FEHLER: NAS-Pfad $NAS_PATH_VAL nicht gefunden!"
-    exit 1
+# Fallback, falls leer
+if [ -z "$DATA_PATH" ]; then
+    DATA_PATH="/data/opencloud"
 fi
 
-# --- PFADE ---
-export OC_BASE_DATA_PATH="/data/data"
-export OC_CONFIG_DIR="/data/config"
+echo "Verwende Speicherpfad: $DATA_PATH"
 
-# 1. Wir sagen OpenCloud: "Hier ist dein Root"
-# OpenCloud macht daraus AUTOMATISCH: /data/data/storage/users
-export OC_STORAGE_USERS_ROOT="/data/data/storage"
-
-# 2. Deshalb müssen wir den Symlink auch GENAU DORT bauen:
-ACTUAL_DATA_DIR="/data/data/storage/users"
-NAS_BLOBS="$NAS_PATH_VAL/blobs"
-
-# Ordner vorbereiten
-mkdir -p "$OC_CONFIG_DIR"
-mkdir -p "$NAS_BLOBS"
-
-# --- SYMLINK LOGIK ---
-echo "--> Bereite Ordnerstruktur vor..."
-
-# Wir erstellen den Ordner /users manuell, bevor OpenCloud es tut
-mkdir -p "$ACTUAL_DATA_DIR"
-
-# Der Pfad, wo der Link hin MUSS:
-TARGET_LINK="$ACTUAL_DATA_DIR/blobs"
-
-# Aufräumen: Falls dort schon ein echter Ordner ist -> Weg damit!
-if [ -d "$TARGET_LINK" ] && [ ! -L "$TARGET_LINK" ]; then
-    echo "ACHTUNG: Lösche lokalen Blob-Ordner $TARGET_LINK"
-    rm -rf "$TARGET_LINK"
+# 2. Verzeichnisse vorbereiten
+# Erstelle das Zielverzeichnis (egal ob lokal oder auf dem NAS)
+if [ ! -d "$DATA_PATH" ]; then
+    echo "Erstelle Verzeichnis $DATA_PATH..."
+    mkdir -p "$DATA_PATH"
 fi
 
-# Symlink setzen
-if [ ! -L "$TARGET_LINK" ]; then
-    ln -s "$NAS_BLOBS" "$TARGET_LINK"
-    echo "--> Symlink gesetzt: $TARGET_LINK -> $NAS_BLOBS"
+# Erstelle Unterordner für Config und Data im Zielverzeichnis
+mkdir -p "$DATA_PATH/config"
+mkdir -p "$DATA_PATH/data"
+
+# Aufräumen der Container-internen Pfade, um Symlinks zu ermöglichen
+rm -rf /etc/opencloud
+rm -rf /var/lib/opencloud
+
+# 3. Symlinks setzen
+# Wir verlinken die internen OpenCloud Pfade auf deinen gewählten Speicherort
+ln -s "$DATA_PATH/config" /etc/opencloud
+ln -s "$DATA_PATH/data" /var/lib/opencloud
+
+# 4. Passwort Logik
+if [ -z "$ADMIN_PASS" ]; then
+    echo "Warnung: Kein Admin-Passwort gefunden, nutze Standard."
+    export IDM_ADMIN_PASSWORD="admin"
 else
-    echo "--> Symlink existiert bereits."
+    export IDM_ADMIN_PASSWORD="$ADMIN_PASS"
 fi
 
-# --- RECHTE ---
-echo "--> Setze Rechte..."
-chown -R 1000:1000 "$NAS_BLOBS" || true
-chown -hR 1000:1000 /data/data
-chown -R 1000:1000 /data/config
-
-# --- UMGEBUNGSVARIABLEN ---
+# 5. Starten
 export OC_INSECURE=true
-export PROXY_TLS=false
-export PROXY_HTTP_ADDR="0.0.0.0:9200"
-export IDM_ADMIN_PASSWORD="$ADMIN_PASS"
-export OC_URL="$OC_URL_VAL"
-export PROXY_TRUSTED_PROXIES="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1"
-export OC_STORAGE_USERS_DRIVER="ocis"
 
-echo "--> Init & Start..."
-su-exec 1000:1000 opencloud init || true
-exec su-exec 1000:1000 opencloud server
+echo "Starte OpenCloud Init..."
+opencloud init --insecure true || true
+
+echo "Starte OpenCloud Server..."
+exec opencloud server
