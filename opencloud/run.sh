@@ -36,4 +36,4 @@ echo "------------------------------------------------"
 
 # Starten der Anwendung (als der User, der im Original-Image definiert ist, oder root)
 # Da wir im Dockerfile root sind, starten wir es einfach.
-exec /opencloud
+exec opencloud
