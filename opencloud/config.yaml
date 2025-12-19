@@ -1,27 +1,15 @@
-name: OpenCloud
-version: "0.1.0"
-slug: opencloud
-description: OpenCloud Filesharing Server
-url: https://github.com/d-shmt/ha-opencloud-addon
+name: "OpenCloud"
+description: "Moderner Cloud-Speicher (oCIS Fork) für Home Assistant"
+version: "1.0.0"
+slug: "opencloud"
 arch:
   - amd64
-  - arm64
-startup: services
-boot: auto
-
-options:
-  data_path: /share/opencloud/data
-  config_path: /share/opencloud/config
-  external_url: https://cloud.example.com
-
-schema:
-  data_path: str
-  config_path: str
-  external_url: str
-
-ports:
-  8080/tcp: null
-
+init: false
 map:
-  - share:rw
-  - ssl:rw
+  - share:rw  # Wichtig für den NFS-Zugriff
+options:
+  domain: "deine-domain.de"
+  admin_password: "admin"
+schema:
+  domain: str
+  admin_password: password
