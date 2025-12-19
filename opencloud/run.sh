@@ -25,56 +25,46 @@ if [ ! -d "$STORAGE_PATH" ]; then
 fi
 
 # 3. VERZEICHNISSTRUKTUR VORBEREITEN
-# Config Ordner auf HA-Disk anlegen
+# Config Ordner auf HA-Disk anlegen (Persistent)
 mkdir -p /data/config
-# Data Ordner auf NAS anlegen (falls leer)
+# Data Ordner auf NAS anlegen (falls noch nicht da)
 mkdir -p "$STORAGE_PATH"
 
-# 4. SYMLINK MAGIE (Das Herzstück)
-# Wir löschen die Standard-Ordner im Container und ersetzen sie durch Links zu deinen Pfaden.
-
-# A) CONFIG: /etc/opencloud -> /data/config
-if [ -d "/etc/opencloud" ] && [ ! -L "/etc/opencloud" ]; then
-    rm -rf /etc/opencloud
-fi
-# Erstelle Link nur, wenn er noch nicht existiert
-if [ ! -L "/etc/opencloud" ]; then
-    log "--> Linking internal config path to /data/config..."
-    ln -s /data/config /etc/opencloud
-fi
-
-# B) DATA: /var/lib/opencloud -> NAS Share
-if [ -d "/var/lib/opencloud" ] && [ ! -L "/var/lib/opencloud" ]; then
-    rm -rf /var/lib/opencloud
-fi
-# Erstelle Link nur, wenn er noch nicht existiert
-if [ ! -L "/var/lib/opencloud" ]; then
-    log "--> Linking internal data path to NAS Share..."
-    ln -s "$STORAGE_PATH" /var/lib/opencloud
-fi
-
-# 5. ENVIRONMENT VARIABLEN
-# Wir setzen nur noch die nötigsten Netzwerksachen. Pfade sind durch Symlinks geregelt.
+# 4. ENVIRONMENT VARIABLEN
 export OC_SERVER_ADDRESS="0.0.0.0"
 export OC_SERVER_PORT="9200"
 export OC_URL="https://$DOMAIN"
 export OC_INSECURE="true"
 
-# Wir setzen explizit KEINE Pfad-Variablen mehr, da die Symlinks das regeln!
-# Das verhindert Konflikte.
+# WICHTIG: Wir sagen OpenCloud, wo die Basis-Daten liegen sollen (NAS)
+# Damit umgehen wir das Löschen von /var/lib/opencloud
+export OC_BASE_DATA_PATH="$STORAGE_PATH"
 
-# 6. INITIALISIERUNG
+# Wir definieren, wo die Config liegen soll (für init)
+export OC_CONFIG_FILE="/data/config/opencloud.yaml"
+
+# 5. INITIALISIERUNG
 if [ -f "/data/config/opencloud.yaml" ]; then
-    log "--> Config found. Skipping init."
+    log "--> Config found in /data/config. Skipping init."
 else
     log "--> No config found. Initializing..."
-    # Init schreibt nun automatisch nach /etc/opencloud -> landet in /data/config
+    # Init schreibt nach /data/config/opencloud.yaml
     opencloud init || true
 fi
 
+# 6. SYMLINK FIX (Das löst den "Resource busy" Fehler)
+# Wir löschen den Ordner NICHT. Wir verlinken nur die Config-Datei hinein.
+log "--> Linking config file to /etc/opencloud/opencloud.yaml..."
+
+# Sicherstellen, dass der Zielordner existiert (sollte er aber, da er busy war)
+mkdir -p /etc/opencloud
+
+# Symlink erzwingen (-f force), überschreibt existierende Datei im Container
+ln -sf /data/config/opencloud.yaml /etc/opencloud/opencloud.yaml
+
+
 # 7. CONFIG PATCHING (Mount IDs Fix)
-# Wir müssen sicherstellen, dass die IDs in der Config stehen.
-# Da die Datei jetzt sicher in /data/config/opencloud.yaml liegt, können wir sie bearbeiten.
+# Wir patchen die Datei in /data/config, der Link in /etc übernimmt das automatisch.
 CONFIG_FILE="/data/config/opencloud.yaml"
 
 if ! grep -q "storage_users_mount_id:" "$CONFIG_FILE"; then
@@ -115,4 +105,6 @@ log "--> Starting OpenCloud Server..."
 echo "------------------------------------------------"
 
 # Starten
+# Da die Datei jetzt in /etc/opencloud/opencloud.yaml verlinkt ist,
+# findet der Server sie automatisch.
 exec opencloud server
