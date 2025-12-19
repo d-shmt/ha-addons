@@ -35,7 +35,7 @@ export OC_INSECURE=true
 export PROXY_TLS=false
 export PROXY_HTTP_ADDR="0.0.0.0:9200"
 export OC_URL="$OC_URL_VAL"
-# Vertraue allen internen Netzen (Docker, LAN, Localhost) für Proxy-Header
+# Vertraue allen internen Netzen für Proxy-Header
 export PROXY_TRUSTED_PROXIES="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1"
 
 # Admin User (wird beim init verwendet)
@@ -53,13 +53,10 @@ if [ ! -d "$NAS_BLOBS" ]; then
     mkdir -p "$NAS_BLOBS"
 fi
 
-# Rechte setzen (Wir sind aktuell noch root)
-# Wir versuchen das NAS auf 1000 zu setzen. Wenn das NFS das blockt (Root Squash),
-# ignorieren wir den Fehler mit '|| true', hoffen aber, dass User 1000 schreiben darf.
-chown -R 1000:1000 "$OC_BASE_DATA_PATH" "$OC_CONFIG_DIR"
-chown -R 1000:1000 "$NAS_BLOBS" || true
-
 # --- 5. INITIALISIERUNG ---
+# Wir setzen die Rechte vor dem Init, damit User 1000 schreiben darf
+chown -R 1000:1000 "$OC_BASE_DATA_PATH" "$OC_CONFIG_DIR"
+
 if [ ! -f "$OC_CONFIG_DIR/opencloud.yaml" ]; then
     log "--> Keine Config gefunden. Führe 'opencloud init' aus..."
     # Wir führen init als User 1000 aus!
@@ -69,38 +66,39 @@ else
 fi
 
 # --- 6. DER STORAGE-HACK (Symlink) ---
-# OpenCloud speichert Dateien standardmäßig unter: $OC_BASE_DATA_PATH/storage/users/blobs
-# Wir biegen diesen 'blobs' Ordner auf das NAS um.
-
 INTERNAL_STORAGE_ROOT="$OC_BASE_DATA_PATH/storage/users"
 INTERNAL_BLOBS_LINK="$INTERNAL_STORAGE_ROOT/blobs"
 
 log "--> Konfiguriere Hybrid-Storage..."
 
-# Stelle sicher, dass der Eltern-Ordner existiert (wichtig beim ersten Start!)
+# Hier entstehen Verzeichnisse als ROOT (das war der Fehler!)
 mkdir -p "$INTERNAL_STORAGE_ROOT"
-chown 1000:1000 "$INTERNAL_STORAGE_ROOT"
 
-# Prüfen, ob dort schon ein 'echter' Ordner ist (falsch) oder ein Link (richtig)
+# Prüfen auf alte Ordner/Links
 if [ -d "$INTERNAL_BLOBS_LINK" ] && [ ! -L "$INTERNAL_BLOBS_LINK" ]; then
-    log "WARNUNG: Lokaler Blobs-Ordner gefunden. Lösche ihn, um Platz für Symlink zu machen..."
-    # Vorsicht: Das löscht Daten, die versehentlich lokal gelandet sind!
+    log "WARNUNG: Lokaler Blobs-Ordner gefunden. Lösche ihn..."
     rm -rf "$INTERNAL_BLOBS_LINK"
 fi
 
-# Symlink erstellen, falls noch nicht da
+# Symlink erstellen
 if [ ! -L "$INTERNAL_BLOBS_LINK" ]; then
     log "--> Erstelle Symlink: Lokal -> NAS"
     ln -s "$NAS_BLOBS" "$INTERNAL_BLOBS_LINK"
-    # Eigentümer des Links anpassen (User 1000)
-    chown -h 1000:1000 "$INTERNAL_BLOBS_LINK"
-else
-    log "--> Symlink zum NAS ist bereits aktiv."
 fi
 
-# --- 7. START ---
+# --- 7. RECHTE-FIX (WICHTIG!) ---
+log "--> Korrigiere Dateirechte für User 1000..."
+# Das behebt den "permission denied" Fehler für /storage/ocm
+# Wir ändern den Besitzer von ALLEM in /data/data rekursiv auf 1000.
+# -h sorgt dafür, dass wir den Symlink selbst ändern, nicht das Ziel auf dem NAS
+chown -hR 1000:1000 "$OC_BASE_DATA_PATH"
+chown -R 1000:1000 "$OC_CONFIG_DIR"
+
+# Optional: NAS Rechte anpassen (Fehler ignorieren bei NFS Root Squash)
+chown -R 1000:1000 "$NAS_BLOBS" || true
+
+# --- 8. START ---
 log "--> Starte OpenCloud Server..."
 echo "------------------------------------------------"
 
-# Start als User 1000
 exec su-exec 1000:1000 opencloud server
