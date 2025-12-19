@@ -1,31 +1,20 @@
 name: "OpenCloud"
-version: "1.0.0"
+version: "0.1.0"
 slug: "opencloud"
-description: "OpenCloud - Open Source File Management & Collaboration Platform"
+description: "OpenCloud running as a Home Assistant Add-on."
+url: "https://github.com/opencloud-eu"
 arch:
   - aarch64
   - amd64
-  - armhf
-  - armv7
-  - i386
-url: "https://github.com/d-shmt/ha-addons"
 startup: application
 boot: auto
-init: false
+map:
+  - share:rw  # WICHTIG: Lese-/Schreibzugriff auf /share (wo dein NFS liegt)
 ports:
   9200/tcp: 9200
-ports_description:
-  9200/tcp: "OpenCloud Web Interface"
 options:
   domain: "cloud.deinedomain.de"
-  data_path: "/mnt/nas/opencloud/data"
-  config_path: "/mnt/nas/opencloud/config"
-  admin_password: ""
-  log_level: "info"
+  storage_path: "/share/nas_mount/opencloud_data"
 schema:
   domain: str
-  data_path: str
-  config_path: str
-  admin_password: password
-  log_level: list(trace|debug|info|notice|warning|error|fatal)?
-image: "ghcr.io/d-shmt/ha-addon-opencloud-{arch}"
+  storage_path: str
