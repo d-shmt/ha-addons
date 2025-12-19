@@ -27,8 +27,7 @@ if [ ! -d "$STORAGE_PATH" ]; then
 fi
 
 # 3. SECRET & ID MANAGEMENT
-# Wir erstellen Hilfsdateien im /data Ordner, damit die Werte Neustarts überleben.
-# Wir nutzen 'tr -d "\n"' um sicherzugehen, dass keine Zeilenumbrüche in den Variablen landen.
+# Wir nutzen 'tr -d [:space:]' um sicherzugehen, dass ABSOLUT KEINE Leerzeichen/Zeilenumbrüche existieren.
 
 # --- A) JWT SECRET ---
 JWT_SECRET_FILE="/data/oc_jwt_secret"
@@ -36,7 +35,7 @@ if [ ! -f "$JWT_SECRET_FILE" ]; then
     log "--> Generating new JWT secret..."
     tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$JWT_SECRET_FILE"
 fi
-export OC_JWT_SECRET=$(cat "$JWT_SECRET_FILE" | tr -d '\n')
+export OC_JWT_SECRET=$(cat "$JWT_SECRET_FILE" | tr -d '[:space:]')
 
 # --- B) TRANSFER SECRET ---
 TRANSFER_SECRET_FILE="/data/oc_transfer_secret"
@@ -44,7 +43,7 @@ if [ ! -f "$TRANSFER_SECRET_FILE" ]; then
     log "--> Generating new Transfer secret..."
     tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$TRANSFER_SECRET_FILE"
 fi
-export OC_TRANSFER_SECRET=$(cat "$TRANSFER_SECRET_FILE" | tr -d '\n')
+export OC_TRANSFER_SECRET=$(cat "$TRANSFER_SECRET_FILE" | tr -d '[:space:]')
 
 # --- C) MACHINE AUTH SECRET ---
 MACHINE_AUTH_FILE="/data/oc_machine_auth_secret"
@@ -52,7 +51,7 @@ if [ ! -f "$MACHINE_AUTH_FILE" ]; then
     log "--> Generating new Machine Auth secret..."
     tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$MACHINE_AUTH_FILE"
 fi
-export OC_MACHINE_AUTH_API_KEY=$(cat "$MACHINE_AUTH_FILE" | tr -d '\n')
+export OC_MACHINE_AUTH_API_KEY=$(cat "$MACHINE_AUTH_FILE" | tr -d '[:space:]')
 
 # --- D) USER IDs ---
 # System User
@@ -61,19 +60,19 @@ if [ ! -f "$SYSTEM_USER_ID_FILE" ]; then
     log "--> Generating new System User UUID..."
     cat /proc/sys/kernel/random/uuid > "$SYSTEM_USER_ID_FILE"
 fi
-export OC_SYSTEM_USER_ID=$(cat "$SYSTEM_USER_ID_FILE" | tr -d '\n')
+export OC_SYSTEM_USER_ID=$(cat "$SYSTEM_USER_ID_FILE" | tr -d '[:space:]')
 
-# Admin User (Neu hinzugefügt, um zukünftige Fehler zu vermeiden)
+# Admin User
 ADMIN_USER_ID_FILE="/data/oc_admin_user_id"
 if [ ! -f "$ADMIN_USER_ID_FILE" ]; then
     log "--> Generating new Admin User UUID..."
     cat /proc/sys/kernel/random/uuid > "$ADMIN_USER_ID_FILE"
 fi
-export OC_ADMIN_USER_ID=$(cat "$ADMIN_USER_ID_FILE" | tr -d '\n')
+export OC_ADMIN_USER_ID=$(cat "$ADMIN_USER_ID_FILE" | tr -d '[:space:]')
 
 
-# --- E) STORAGE MOUNT IDs ---
-# Wir lesen die IDs aus und setzen sie GLOBAL und explizit für das GATEWAY
+# --- E) STORAGE MOUNT IDs (Die "Schrotflinte") ---
+# Wir verteilen die IDs an ALLE Services, die sie brauchen könnten.
 
 # 1. Users Mount ID
 USERS_MOUNT_ID_FILE="/data/oc_storage_users_mount_id"
@@ -81,11 +80,16 @@ if [ ! -f "$USERS_MOUNT_ID_FILE" ]; then
     log "--> Generating new Storage Users Mount ID..."
     cat /proc/sys/kernel/random/uuid > "$USERS_MOUNT_ID_FILE"
 fi
-MOUNT_ID_USERS=$(cat "$USERS_MOUNT_ID_FILE" | tr -d '\n')
-# Setzen für Storage Service
+MOUNT_ID_USERS=$(cat "$USERS_MOUNT_ID_FILE" | tr -d '[:space:]')
+
+# GLOBAL setting
 export OC_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-# Setzen explizit für Gateway Service (Fix für den Fehler)
+# Explicit Service Overrides
 export OC_GATEWAY_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
+export OC_WEBDAV_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
+export OC_FRONTEND_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
+export OC_STORAGE_PUBLICLINK_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
+export OC_STORAGE_SHARES_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 
 
 # 2. System Mount ID
@@ -94,10 +98,11 @@ if [ ! -f "$SYSTEM_MOUNT_ID_FILE" ]; then
     log "--> Generating new Storage System Mount ID..."
     cat /proc/sys/kernel/random/uuid > "$SYSTEM_MOUNT_ID_FILE"
 fi
-MOUNT_ID_SYSTEM=$(cat "$SYSTEM_MOUNT_ID_FILE" | tr -d '\n')
-# Setzen für Storage Service
+MOUNT_ID_SYSTEM=$(cat "$SYSTEM_MOUNT_ID_FILE" | tr -d '[:space:]')
+
+# GLOBAL setting
 export OC_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
-# Setzen explizit für Gateway Service
+# Explicit Service Overrides
 export OC_GATEWAY_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
 
 
@@ -111,14 +116,15 @@ export OC_STORAGE_LOCAL_ROOT="$STORAGE_PATH"
 export OC_BASE_DATA_PATH="/data"
 export OC_CONFIG_FILE="/data/opencloud.yaml"
 
-log "--> Checking/Initializing OpenCloud configuration..."
-
-# Init, falls noch keine Config existiert
-if [ ! -f "/data/opencloud.yaml" ]; then
-    log "--> No config found. Initializing..."
-    opencloud init || true
-else
+# Setzen des Admin-Passworts via Env-Var, falls Config Init dies braucht
+# (Dies verhindert Probleme, falls Init nicht läuft)
+if [ -f "/data/opencloud.yaml" ]; then
     log "--> Config found. Skipping initialization."
+else
+    log "--> No config found. Initializing..."
+    log "--> Please wait..."
+    # Wir führen init aus, lassen aber unsere Env-Vars gewinnen
+    opencloud init || true
 fi
 
 log "--> Starting OpenCloud Server..."
