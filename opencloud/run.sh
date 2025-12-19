@@ -3,18 +3,29 @@ set -e
 
 echo "--> Starte OpenCloud (Direct NFS Mode)..."
 
-# --- CONFIG ---
+# --- CONFIG LESEN ---
 CONFIG_PATH=/data/options.json
 ADMIN_PASS=$(jq --raw-output '.admin_password' $CONFIG_PATH)
 OC_URL_VAL=$(jq --raw-output '.oc_url' $CONFIG_PATH)
-# Das ist jetzt der String: "192.168.x.x:/Pfad/..."
-NFS_TARGET=$(jq --raw-output '.nfs_path' $CONFIG_PATH)
+
+# WICHTIG: Wir nutzen einfach '.data_path'. 
+# Das Feld hast du schon in der UI!
+NFS_TARGET=$(jq --raw-output '.data_path' $CONFIG_PATH)
+
+# --- VALIDIERUNG ---
+if [ "$NFS_TARGET" = "null" ] || [ -z "$NFS_TARGET" ]; then
+    echo "FEHLER: 'data_path' ist leer! Bitte trage den NFS-Pfad in die Konfiguration ein."
+    echo "Format: 192.168.1.100:/HDD/opencloud-data/blobs"
+    exit 1
+fi
+
+echo "--> NFS Target: $NFS_TARGET"
 
 # --- PFADE ---
 export OC_CONFIG_DIR="/data/config"
 export OC_BASE_DATA_PATH="/data/data"
 
-# Zielordner im Container (wo die Blobs hinsollen)
+# Zielordner im Container
 LOCAL_STORAGE_USERS="$OC_BASE_DATA_PATH/storage/users"
 MOUNT_POINT="$LOCAL_STORAGE_USERS/blobs"
 
@@ -22,39 +33,35 @@ MOUNT_POINT="$LOCAL_STORAGE_USERS/blobs"
 mkdir -p "$OC_CONFIG_DIR"
 mkdir -p "$LOCAL_STORAGE_USERS"
 
-# Wichtig: Für einen Mount muss der Zielordner existieren (und leer sein)
+# Mountpoint erstellen
 if [ ! -d "$MOUNT_POINT" ]; then
     mkdir -p "$MOUNT_POINT"
 fi
 
 # --- MOUNT LOGIK ---
-echo "--> Versuche direkten NFS Mount..."
-echo "--> Quelle: $NFS_TARGET"
-echo "--> Ziel:   $MOUNT_POINT"
-
-# Mounten mit 'nolock' (wichtig für Container) und 'vers=4' (falls Proxmox v4 kann, sonst weglassen)
-# Wir fangen Fehler ab, falls es schon gemountet ist
-mount -t nfs -o rw,nolock,async "$NFS_TARGET" "$MOUNT_POINT" || echo "WARNUNG: Mount fehlgeschlagen oder bereits aktiv."
-
-# Check ob Mount wirklich da ist
+# Check ob schon gemountet (bei Restart des Containers)
 if mount | grep -q "$MOUNT_POINT"; then
-    echo "--> ERFOLG: NFS Share ist gemountet!"
+    echo "Info: Share ist bereits gemountet."
 else
-    echo "FEHLER: Konnte NFS Share nicht mounten. Bitte Log prüfen."
-    # Wir machen hier keinen exit 1, sondern versuchen es trotzdem - vielleicht klappt der Start
+    echo "--> Versuche Mount..."
+    # Wir mounten mit 'nolock', das ist in Containern oft stabiler
+    mount -t nfs -o rw,nolock,async "$NFS_TARGET" "$MOUNT_POINT"
 fi
 
-# --- RECHTE FIXEN ---
-# Jetzt, wo das NAS eingehängt ist, gehören die Ordner evtl. root.
-# Wir versuchen, sie für opencloud (1000) lesbar zu machen.
-# Das klappt nur, wenn Proxmox (wie vorhin besprochen) 'all_squash' oder 'chmod 777' hat.
-echo "--> Passe Rechte auf dem Mount an..."
-chown -R 1000:1000 "$MOUNT_POINT" || echo "Info: Konnte Rechte auf Mount nicht ändern (bei NFS oft normal)."
+# Check ob es geklappt hat
+if mount | grep -q "$MOUNT_POINT"; then
+    echo "--> ERFOLG: NFS Share ist eingehängt!"
+    # Rechte fixen (falls möglich)
+    chown -R 1000:1000 "$MOUNT_POINT" || echo "Info: Rechte auf NFS konnten nicht geändert werden (Check Proxmox all_squash)"
+else
+    echo "FEHLER: Mount fehlgeschlagen!"
+    exit 1
+fi
 
-# Lokale Config Rechte
+# --- START ---
+# Rechte lokal
 chown -R 1000:1000 /data/data /data/config
 
-# --- ENV & START ---
 export OC_INSECURE=true
 export PROXY_TLS=false
 export PROXY_HTTP_ADDR="0.0.0.0:9200"
