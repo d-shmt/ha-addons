@@ -28,6 +28,7 @@ fi
 
 # 3. SECRET & ID MANAGEMENT
 # Wir erstellen Hilfsdateien im /data Ordner, damit die Werte Neustarts überleben.
+# Wir nutzen 'tr -d "\n"' um sicherzugehen, dass keine Zeilenumbrüche in den Variablen landen.
 
 # --- A) JWT SECRET ---
 JWT_SECRET_FILE="/data/oc_jwt_secret"
@@ -35,7 +36,7 @@ if [ ! -f "$JWT_SECRET_FILE" ]; then
     log "--> Generating new JWT secret..."
     tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$JWT_SECRET_FILE"
 fi
-export OC_JWT_SECRET=$(cat "$JWT_SECRET_FILE")
+export OC_JWT_SECRET=$(cat "$JWT_SECRET_FILE" | tr -d '\n')
 
 # --- B) TRANSFER SECRET ---
 TRANSFER_SECRET_FILE="/data/oc_transfer_secret"
@@ -43,7 +44,7 @@ if [ ! -f "$TRANSFER_SECRET_FILE" ]; then
     log "--> Generating new Transfer secret..."
     tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$TRANSFER_SECRET_FILE"
 fi
-export OC_TRANSFER_SECRET=$(cat "$TRANSFER_SECRET_FILE")
+export OC_TRANSFER_SECRET=$(cat "$TRANSFER_SECRET_FILE" | tr -d '\n')
 
 # --- C) MACHINE AUTH SECRET ---
 MACHINE_AUTH_FILE="/data/oc_machine_auth_secret"
@@ -51,34 +52,53 @@ if [ ! -f "$MACHINE_AUTH_FILE" ]; then
     log "--> Generating new Machine Auth secret..."
     tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$MACHINE_AUTH_FILE"
 fi
-export OC_MACHINE_AUTH_API_KEY=$(cat "$MACHINE_AUTH_FILE")
+export OC_MACHINE_AUTH_API_KEY=$(cat "$MACHINE_AUTH_FILE" | tr -d '\n')
 
-# --- D) SYSTEM USER ID ---
+# --- D) USER IDs ---
+# System User
 SYSTEM_USER_ID_FILE="/data/oc_system_user_id"
 if [ ! -f "$SYSTEM_USER_ID_FILE" ]; then
     log "--> Generating new System User UUID..."
     cat /proc/sys/kernel/random/uuid > "$SYSTEM_USER_ID_FILE"
 fi
-export OC_SYSTEM_USER_ID=$(cat "$SYSTEM_USER_ID_FILE")
+export OC_SYSTEM_USER_ID=$(cat "$SYSTEM_USER_ID_FILE" | tr -d '\n')
 
-# --- E) STORAGE MOUNT IDs (Neu) ---
-# Damit Gateway und Storage Service wissen, wo die Daten liegen.
+# Admin User (Neu hinzugefügt, um zukünftige Fehler zu vermeiden)
+ADMIN_USER_ID_FILE="/data/oc_admin_user_id"
+if [ ! -f "$ADMIN_USER_ID_FILE" ]; then
+    log "--> Generating new Admin User UUID..."
+    cat /proc/sys/kernel/random/uuid > "$ADMIN_USER_ID_FILE"
+fi
+export OC_ADMIN_USER_ID=$(cat "$ADMIN_USER_ID_FILE" | tr -d '\n')
 
-# 1. Users Mount ID (Fix für aktuellen Fehler)
+
+# --- E) STORAGE MOUNT IDs ---
+# Wir lesen die IDs aus und setzen sie GLOBAL und explizit für das GATEWAY
+
+# 1. Users Mount ID
 USERS_MOUNT_ID_FILE="/data/oc_storage_users_mount_id"
 if [ ! -f "$USERS_MOUNT_ID_FILE" ]; then
     log "--> Generating new Storage Users Mount ID..."
     cat /proc/sys/kernel/random/uuid > "$USERS_MOUNT_ID_FILE"
 fi
-export OC_STORAGE_USERS_MOUNT_ID=$(cat "$USERS_MOUNT_ID_FILE")
+MOUNT_ID_USERS=$(cat "$USERS_MOUNT_ID_FILE" | tr -d '\n')
+# Setzen für Storage Service
+export OC_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
+# Setzen explizit für Gateway Service (Fix für den Fehler)
+export OC_GATEWAY_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 
-# 2. System Mount ID (Prophylaktisch)
+
+# 2. System Mount ID
 SYSTEM_MOUNT_ID_FILE="/data/oc_storage_system_mount_id"
 if [ ! -f "$SYSTEM_MOUNT_ID_FILE" ]; then
     log "--> Generating new Storage System Mount ID..."
     cat /proc/sys/kernel/random/uuid > "$SYSTEM_MOUNT_ID_FILE"
 fi
-export OC_STORAGE_SYSTEM_MOUNT_ID=$(cat "$SYSTEM_MOUNT_ID_FILE")
+MOUNT_ID_SYSTEM=$(cat "$SYSTEM_MOUNT_ID_FILE" | tr -d '\n')
+# Setzen für Storage Service
+export OC_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
+# Setzen explizit für Gateway Service
+export OC_GATEWAY_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
 
 
 # 4. Environment Variablen setzen
