@@ -1,11 +1,24 @@
-#!/usr/bin/env bash
-set -e
+#!/usr/bin/with-contenv bashio
 
-echo "Starting OpenCloud..."
+# HA Optionen auslesen
+DOMAIN=$(bashio::config 'domain')
+ADMIN_PASSWORD=$(bashio::config 'admin_password')
 
-mkdir -p "$OC_DATA_DIR" "$OC_CONFIG_DIR"
-chown -R 1000:1000 "$OC_DATA_DIR" "$OC_CONFIG_DIR"
+bashio::log.info "Starte OpenCloud für Domain: ${DOMAIN}"
 
-opencloud server \
-  --data-dir "$OC_DATA_DIR" \
-  --config-dir "$OC_CONFIG_DIR"
+# Verzeichnisse auf dem NFS-Share vorbereiten
+export OCIS_BASE_DATA_PATH="/share/opencloud/data"
+export OCIS_CONFIG_DIR="/share/opencloud/config"
+mkdir -p $OCIS_BASE_DATA_PATH $OCIS_CONFIG_DIR
+
+# Konfiguration für Reverse Proxy (Pangolin)
+export OCIS_URL="https://${DOMAIN}"
+export PROXY_TLS=false # Da Pangolin TLS übernimmt
+export OCIS_INSECURE=true # Intern unverschlüsselt, Pangolin macht HTTPS
+
+# Admin Passwort setzen (nur beim ersten Start relevant)
+export IDM_ADMIN_PASSWORD=$ADMIN_PASSWORD
+
+# OpenCloud starten (Hier nutzen wir das Binary aus dem Image)
+# Hinweis: Je nach Image-Pfad anpassen
+exec /usr/bin/ocis server
