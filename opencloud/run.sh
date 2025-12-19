@@ -39,10 +39,20 @@ echo "--> Setze Umgebungsvariablen..."
 export OC_INSECURE=true
 export PROXY_TLS=false
 
+# HIER IST DER FIX:
+# Damit interne Services (Frontend) auch ohne HTTPS kommunizieren:
+export OCIS_INSECURE=true
+export OCIS_URL="$OC_URL_VAL"
+
 # 2. Die wichtigsten OCIS Einstellungen
 export IDM_ADMIN_PASSWORD="$ADMIN_PASS"
 export OC_URL="$OC_URL_VAL"
 export PROXY_HTTP_ADDR="0.0.0.0:9200"
+
+# HIER IST DER ZWEITE FIX (Web Reachability):
+# Wir zwingen den statischen Web-Server auf IPv4 0.0.0.0,
+# damit er unter 127.0.0.1 erreichbar ist.
+export WEB_HTTP_ADDR="0.0.0.0:9140"
 
 # 3. VERTRAUENS-EINSTELLUNGEN (Wichtig für Pangolin!)
 # Wir vertrauen ALLEN privaten Netzwerken. Das verhindert den 400er Fehler,
