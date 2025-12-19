@@ -48,7 +48,7 @@ export OC_URL="$OC_URL_VAL"
 # Wir zwingen OCIS, genau diesen Pfad als Root für User-Daten zu nehmen.
 # Damit verhindern wir das "users/users" Problem.
 export OC_STORAGE_USERS_DRIVER="ocis"
-export OC_STORAGE_USERS_ROOT="/data/data/storage/users"
+export OC_STORAGE_USERS_ROOT="/data/data/storage"
 
 # --- SYMLINK LOGIK (Der "Trick") ---
 echo "--> Verlinke Blob-Speicher zum NAS..."
