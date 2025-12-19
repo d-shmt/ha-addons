@@ -122,12 +122,16 @@ else
     log "--> Config found. Skipping initialization."
 fi
 
-# --- F) CONFIG CLEANUP (WICHTIG!) ---
-# Wir löschen die Zeilen mit den Mount-IDs aus der Config-Datei.
-# Das zwingt OpenCloud, unsere Environment-Variablen zu nutzen.
-log "--> Patching config file to force usage of ENV variables..."
-sed -i '/storage_users_mount_id/d' /data/opencloud.yaml
-sed -i '/storage_system_mount_id/d' /data/opencloud.yaml
+# --- F) CONFIG INJECTION (WICHTIG!) ---
+# Wir löschen nicht mehr, wir schreiben die Werte HART in die Datei.
+# sed sucht nach "storage_users_mount_id: ..." und ersetzt die ganze Zeile.
+log "--> Injecting IDs directly into opencloud.yaml..."
+
+# Ersetze Users Mount ID überall wo sie auftaucht
+sed -i "s|storage_users_mount_id:.*|storage_users_mount_id: \"$MOUNT_ID_USERS\"|g" /data/opencloud.yaml
+
+# Ersetze System Mount ID überall wo sie auftaucht
+sed -i "s|storage_system_mount_id:.*|storage_system_mount_id: \"$MOUNT_ID_SYSTEM\"|g" /data/opencloud.yaml
 
 log "--> Starting OpenCloud Server..."
 echo "------------------------------------------------"
