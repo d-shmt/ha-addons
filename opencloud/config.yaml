@@ -1,6 +1,6 @@
 name: "OpenCloud"
 description: "OpenCloud - Filemanagement & Sharing (NAS Support)."
-version: "1.1.0"
+version: "1.2.0"  # Version erhöht
 slug: "opencloud"
 init: false
 arch:
@@ -9,11 +9,13 @@ arch:
 ports:
   9200/tcp: 9200
 map:
-  - share:rw  # WICHTIG: Gibt dem Add-on Zugriff auf /share (wo das NAS liegt)
+  - share:rw
 options:
   admin_password: "changeme"
-  data_path: "/data/opencloud" # Standard: Lokal auf HA Disk
+  data_path: "/data/opencloud"
+  server_domain: "192.168.1.X" # NEU: Hier muss deine HA-IP rein
 schema:
   admin_password: str
-  data_path: str # Der Pfad, wo die Daten liegen sollen
+  data_path: str
+  server_domain: str # NEU
 startup: application
