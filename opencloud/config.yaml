@@ -1,20 +1,22 @@
 name: "OpenCloud"
-version: "0.1.0"
+version: "1.1.0"
 slug: "opencloud"
-description: "OpenCloud running as a Home Assistant Add-on."
-url: "https://github.com/opencloud-eu"
+description: "OpenCloud Rolling Release - Hybrid Storage (Config Local, Blobs NAS)"
+url: "https://github.com/opencloud-eu/opencloud"
 arch:
   - aarch64
   - amd64
 startup: application
 boot: auto
-map:
-  - share:rw  # WICHTIG: Lese-/Schreibzugriff auf /share (wo dein NFS liegt)
 ports:
   9200/tcp: 9200
+map:
+  - share:rw     # Zwingend für NAS Zugriff
 options:
-  domain: "cloud.deinedomain.de"
-  storage_path: "/share/nas_mount/opencloud_data"
+  admin_password: "ChangeMe123!"
+  oc_url: "https://cloud.deinedomain.de"
+  data_path: "/share/opencloud_data"
 schema:
-  domain: str
-  storage_path: str
+  admin_password: password
+  oc_url: str
+  data_path: str
