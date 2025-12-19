@@ -13,3 +13,8 @@ options:
 schema:
   domain: str
   admin_password: password
+network:
+  9200/tcp: 9200
+map:
+  - share:rw
+  - config:rw # Für interne HA-Daten
