@@ -1,20 +1,31 @@
 name: "OpenCloud"
-description: "Moderner Cloud-Speicher (oCIS Fork) für Home Assistant"
 version: "1.0.0"
 slug: "opencloud"
+description: "OpenCloud - Open Source File Management & Collaboration Platform"
 arch:
+  - aarch64
   - amd64
+  - armhf
+  - armv7
+  - i386
+url: "https://github.com/d-shmt/ha-addons"
+startup: application
+boot: auto
 init: false
-map:
-  - share:rw  # Wichtig für den NFS-Zugriff
+ports:
+  9200/tcp: 9200
+ports_description:
+  9200/tcp: "OpenCloud Web Interface"
 options:
-  domain: "deine-domain.de"
-  admin_password: "admin"
+  domain: "cloud.deinedomain.de"
+  data_path: "/mnt/nas/opencloud/data"
+  config_path: "/mnt/nas/opencloud/config"
+  admin_password: ""
+  log_level: "info"
 schema:
   domain: str
+  data_path: str
+  config_path: str
   admin_password: password
-network:
-  9200/tcp: 9200
-map:
-  - share:rw
-  - config:rw # Für interne HA-Daten
+  log_level: list(trace|debug|info|notice|warning|error|fatal)?
+image: "ghcr.io/d-shmt/ha-addon-opencloud-{arch}"
