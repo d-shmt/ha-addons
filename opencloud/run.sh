@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Funktion für Log-Ausgaben mit Zeitstempel [HH:MM:SS]
+# Funktion für Log-Ausgaben
 log() {
     echo "[$(date '+%H:%M:%S')] $1"
 }
@@ -16,84 +16,13 @@ log "--> Configuration loaded:"
 log "    Domain: $DOMAIN"
 log "    Storage: $STORAGE_PATH"
 
-# 2. SICHERHEITS-CHECK: Speicherpfad
+# 2. Prüfen des Speicherpfads
 if [ ! -d "$STORAGE_PATH" ]; then
-    echo "------------------------------------------------------------"
-    log "CRITICAL ERROR: Storage path NOT found!"
-    log "Path: $STORAGE_PATH"
-    log "Aborting start to prevent data loss."
-    echo "------------------------------------------------------------"
+    log "CRITICAL ERROR: Storage path $STORAGE_PATH NOT found!"
     exit 1
 fi
 
-# 3. SECRET & ID MANAGEMENT
-# Wir nutzen 'tr -d [:space:]' um sicherzugehen, dass ABSOLUT KEINE Leerzeichen/Zeilenumbrüche existieren.
-
-# --- A) JWT SECRET ---
-JWT_SECRET_FILE="/data/oc_jwt_secret"
-if [ ! -f "$JWT_SECRET_FILE" ]; then
-    log "--> Generating new JWT secret..."
-    tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$JWT_SECRET_FILE"
-fi
-export OC_JWT_SECRET=$(cat "$JWT_SECRET_FILE" | tr -d '[:space:]')
-
-# --- B) TRANSFER SECRET ---
-TRANSFER_SECRET_FILE="/data/oc_transfer_secret"
-if [ ! -f "$TRANSFER_SECRET_FILE" ]; then
-    log "--> Generating new Transfer secret..."
-    tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$TRANSFER_SECRET_FILE"
-fi
-export OC_TRANSFER_SECRET=$(cat "$TRANSFER_SECRET_FILE" | tr -d '[:space:]')
-
-# --- C) MACHINE AUTH SECRET ---
-MACHINE_AUTH_FILE="/data/oc_machine_auth_secret"
-if [ ! -f "$MACHINE_AUTH_FILE" ]; then
-    log "--> Generating new Machine Auth secret..."
-    tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$MACHINE_AUTH_FILE"
-fi
-export OC_MACHINE_AUTH_API_KEY=$(cat "$MACHINE_AUTH_FILE" | tr -d '[:space:]')
-
-# --- D) USER IDs ---
-# System User
-SYSTEM_USER_ID_FILE="/data/oc_system_user_id"
-if [ ! -f "$SYSTEM_USER_ID_FILE" ]; then
-    log "--> Generating new System User UUID..."
-    cat /proc/sys/kernel/random/uuid > "$SYSTEM_USER_ID_FILE"
-fi
-export OC_SYSTEM_USER_ID=$(cat "$SYSTEM_USER_ID_FILE" | tr -d '[:space:]')
-
-# Admin User
-ADMIN_USER_ID_FILE="/data/oc_admin_user_id"
-if [ ! -f "$ADMIN_USER_ID_FILE" ]; then
-    log "--> Generating new Admin User UUID..."
-    cat /proc/sys/kernel/random/uuid > "$ADMIN_USER_ID_FILE"
-fi
-export OC_ADMIN_USER_ID=$(cat "$ADMIN_USER_ID_FILE" | tr -d '[:space:]')
-
-
-# --- E) STORAGE MOUNT IDs ---
-# 1. Users Mount ID
-USERS_MOUNT_ID_FILE="/data/oc_storage_users_mount_id"
-if [ ! -f "$USERS_MOUNT_ID_FILE" ]; then
-    log "--> Generating new Storage Users Mount ID..."
-    cat /proc/sys/kernel/random/uuid > "$USERS_MOUNT_ID_FILE"
-fi
-MOUNT_ID_USERS=$(cat "$USERS_MOUNT_ID_FILE" | tr -d '[:space:]')
-
-# 2. System Mount ID
-SYSTEM_MOUNT_ID_FILE="/data/oc_storage_system_mount_id"
-if [ ! -f "$SYSTEM_MOUNT_ID_FILE" ]; then
-    log "--> Generating new Storage System Mount ID..."
-    cat /proc/sys/kernel/random/uuid > "$SYSTEM_MOUNT_ID_FILE"
-fi
-MOUNT_ID_SYSTEM=$(cat "$SYSTEM_MOUNT_ID_FILE" | tr -d '[:space:]')
-
-# Wir exportieren sie trotzdem noch als ENV (Sicherheitshalber)
-export OC_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-export OC_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
-
-
-# 4. Environment Variablen setzen
+# 3. Environment Variablen setzen (Basics)
 export OC_SERVER_ROOT="/data"
 export OC_SERVER_ADDRESS="0.0.0.0"
 export OC_SERVER_PORT="9200"
@@ -101,41 +30,79 @@ export OC_URL="https://$DOMAIN"
 export OC_INSECURE="true"
 export OC_STORAGE_LOCAL_ROOT="$STORAGE_PATH"
 export OC_BASE_DATA_PATH="/data"
-# Wir setzen explizit die Config Datei
 export OC_CONFIG_FILE="/data/opencloud.yaml"
 
-log "--> Checking/Initializing OpenCloud configuration..."
-
-# Init Check
+# 4. Config-Initialisierung
 if [ -f "/data/opencloud.yaml" ]; then
     log "--> Config file exists."
 else
-    # Falls wir im letzten Schritt die Datei in .bak umbenannt haben, finden wir sie hier nicht.
-    # Das ist gut, dann wird sauber neu initialisiert.
     log "--> No config found. Initializing..."
     opencloud init || true
 fi
 
-# --- F) CONFIG PATCHING (APPEND METHODE) ---
-log "--> Patching config file (Appending missing IDs)..."
+# 5. DIE MAGIE: Config neu schreiben
+log "--> Re-writing config file to enforce Mount IDs..."
 
-# Wir prüfen, ob der Eintrag schon existiert, um ihn nicht doppelt reinzuschreiben
-if ! grep -q "storage_users_mount_id:" /data/opencloud.yaml; then
-    log "--> Appending Mount IDs to opencloud.yaml"
-    
-    # Wir fügen die globalen IDs hinzu
-    echo "" >> /data/opencloud.yaml
-    echo "# Manually appended by Add-on" >> /data/opencloud.yaml
-    echo "storage_users_mount_id: \"$MOUNT_ID_USERS\"" >> /data/opencloud.yaml
-    echo "storage_system_mount_id: \"$MOUNT_ID_SYSTEM\"" >> /data/opencloud.yaml
-    
-    # Wir fügen spezifische Gateway Config hinzu (YAML Einrückung beachten!)
-    echo "gateway:" >> /data/opencloud.yaml
-    echo "  storage_users_mount_id: \"$MOUNT_ID_USERS\"" >> /data/opencloud.yaml
-    echo "  storage_system_mount_id: \"$MOUNT_ID_SYSTEM\"" >> /data/opencloud.yaml
-else
-    log "--> Config already patched."
-fi
+# Wir lesen die Secrets aus der existierenden Datei (die gerade von init erstellt wurde)
+# Wir nutzen grep und cut, um den Wert hinter dem Doppelpunkt zu holen und Leerzeichen zu entfernen.
+JWT_SECRET=$(grep "jwt_secret:" /data/opencloud.yaml | cut -d: -f2 | tr -d '[:space:]')
+TRANSFER_SECRET=$(grep "transfer_secret:" /data/opencloud.yaml | cut -d: -f2 | tr -d '[:space:]')
+MACHINE_AUTH=$(grep "machine_auth_api_key:" /data/opencloud.yaml | cut -d: -f2 | tr -d '[:space:]')
+SYSTEM_USER_ID=$(grep "system_user_id:" /data/opencloud.yaml | cut -d: -f2 | tr -d '[:space:]')
+ADMIN_USER_ID=$(grep "admin_user_id:" /data/opencloud.yaml | cut -d: -f2 | tr -d '[:space:]')
+
+# Wir definieren unsere Mount IDs fest
+MOUNT_ID_USERS="a0000000-0000-0000-0000-000000000001"
+MOUNT_ID_SYSTEM="a0000000-0000-0000-0000-000000000002"
+
+log "--> Secrets extracted. Creating clean config..."
+
+# Wir überschreiben die Datei jetzt komplett mit einem sauberen YAML
+cat > /data/opencloud.yaml <<EOF
+---
+# Auto-generated by Home Assistant Add-on
+system_user_id: "$SYSTEM_USER_ID"
+admin_user_id: "$ADMIN_USER_ID"
+machine_auth_api_key: "$MACHINE_AUTH"
+transfer_secret: "$TRANSFER_SECRET"
+
+token_manager:
+  jwt_secret: "$JWT_SECRET"
+
+# Hier setzen wir die Mount IDs GLOBAL
+storage_users_mount_id: "$MOUNT_ID_USERS"
+storage_system_mount_id: "$MOUNT_ID_SYSTEM"
+
+gateway:
+  storage_users_mount_id: "$MOUNT_ID_USERS"
+  storage_system_mount_id: "$MOUNT_ID_SYSTEM"
+
+frontend:
+  storage_users_mount_id: "$MOUNT_ID_USERS"
+
+webdav:
+  storage_users_mount_id: "$MOUNT_ID_USERS"
+
+storage_users:
+  mount_id: "$MOUNT_ID_USERS"
+
+storage_system:
+  mount_id: "$MOUNT_ID_SYSTEM"
+
+auth_machine:
+  api_key: "$MACHINE_AUTH"
+
+# Wichtig: Log Level setzen
+log:
+  level: info
+  pretty: false
+  color: false
+
+EOF
+
+log "--> Config file rewritten successfully."
+log "--> DEBUG: Checking file content:"
+head -n 25 /data/opencloud.yaml
 
 log "--> Starting OpenCloud Server..."
 echo "------------------------------------------------"
