@@ -1,14 +1,16 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base:3.18
-FROM $BUILD_FROM
+# Nutze das offizielle OpenCloud Image
+FROM opencloud/ocis:latest
 
-# Installiere Abhängigkeiten (falls nötig)
-RUN apk add --no-cache curl
+# Installiere Bash und Curl für das HA-Ökosystem
+USER root
+RUN apk add --no-cache bash curl jq
 
-# Kopiere Start-Skript
+# Kopiere HA-spezifische Hilfsmittel (bashio)
+# Wir simulieren hier die HA-Umgebung
 COPY run.sh /
 RUN chmod a+x /run.sh
 
-# OpenCloud Umgebungsvariablen vorbereiten
-ENV OCIS_INSECURE=false
+# OpenCloud Standard-Ports
+EXPOSE 9200
 
-CMD [ "/run.sh" ]
+ENTRYPOINT [ "/bin/bash", "/run.sh" ]
