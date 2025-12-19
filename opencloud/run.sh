@@ -26,6 +26,7 @@ if [ ! -d "$NAS_PATH_VAL" ]; then
 fi
 
 # --- 3. UMGEBUNGSVARIABLEN SETZEN ---
+# Pfade intern
 export OC_BASE_DATA_PATH="/data/data"
 export OC_CONFIG_DIR="/data/config"
 
@@ -33,15 +34,23 @@ export OC_CONFIG_DIR="/data/config"
 export OC_INSECURE=true
 export PROXY_TLS=false
 export PROXY_HTTP_ADDR="0.0.0.0:9200"
-export OC_URL="$OC_URL_VAL"
-# Vertraue allen privaten Netzen (WICHTIG für Pangolin!)
-export PROXY_TRUSTED_PROXIES="10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1"
 
-# DEBUG LOGGING (Neu!)
+# URL Konfiguration (Doppelt hält besser)
+export OC_URL="$OC_URL_VAL"
+export OCIS_URL="$OC_URL_VAL"
+# WICHTIG: Wenn der IDP nicht weiß, dass er öffentlich ist, schlägt der Login fehl
+export IDP_ISSUER_URL="$OC_URL_VAL"
+
+# PROXY VERTRAUEN (Der 500er Killer)
+# Wir erlauben jedem Proxy, Header wie X-Forwarded-For zu senden.
+export PROXY_TRUSTED_PROXIES="0.0.0.0/0"
+
+# Logging auf INFO (damit wir Fehler beim Zugriff sehen)
 export OC_LOG_LEVEL="info"
 export OC_LOG_COLOR="false"
 export OC_LOG_PRETTY="false"
 
+# Admin User
 export IDM_ADMIN_PASSWORD="$ADMIN_PASS"
 
 # --- 4. ORDNER VORBEREITEN ---
