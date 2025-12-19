@@ -80,14 +80,6 @@ if [ ! -f "$USERS_MOUNT_ID_FILE" ]; then
 fi
 MOUNT_ID_USERS=$(cat "$USERS_MOUNT_ID_FILE" | tr -d '[:space:]')
 
-export OC_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-export OC_GATEWAY_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-export OC_WEBDAV_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-export OC_FRONTEND_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-export OC_STORAGE_PUBLICLINK_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-export OC_STORAGE_SHARES_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-export OC_USERS_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
-
 # 2. System Mount ID
 SYSTEM_MOUNT_ID_FILE="/data/oc_storage_system_mount_id"
 if [ ! -f "$SYSTEM_MOUNT_ID_FILE" ]; then
@@ -96,8 +88,9 @@ if [ ! -f "$SYSTEM_MOUNT_ID_FILE" ]; then
 fi
 MOUNT_ID_SYSTEM=$(cat "$SYSTEM_MOUNT_ID_FILE" | tr -d '[:space:]')
 
+# Wir exportieren sie trotzdem noch als ENV (Sicherheitshalber)
+export OC_STORAGE_USERS_MOUNT_ID="$MOUNT_ID_USERS"
 export OC_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
-export OC_GATEWAY_STORAGE_SYSTEM_MOUNT_ID="$MOUNT_ID_SYSTEM"
 
 
 # 4. Environment Variablen setzen
@@ -108,30 +101,44 @@ export OC_URL="https://$DOMAIN"
 export OC_INSECURE="true"
 export OC_STORAGE_LOCAL_ROOT="$STORAGE_PATH"
 export OC_BASE_DATA_PATH="/data"
-# WICHTIG: Wir entfernen hier den Verweis auf die Config Datei!
-# export OC_CONFIG_FILE="/data/opencloud.yaml" 
+# Wir setzen explizit die Config Datei
+export OC_CONFIG_FILE="/data/opencloud.yaml"
 
 log "--> Checking/Initializing OpenCloud configuration..."
 
-# Init lassen wir laufen, um den Admin-User zu erstellen
+# Init Check
 if [ -f "/data/opencloud.yaml" ]; then
     log "--> Config file exists."
 else
+    # Falls wir im letzten Schritt die Datei in .bak umbenannt haben, finden wir sie hier nicht.
+    # Das ist gut, dann wird sauber neu initialisiert.
     log "--> No config found. Initializing..."
-    # Wir setzen temporär den Config-Pfad für init, damit er weiß wohin er schreiben soll
-    OC_CONFIG_FILE="/data/opencloud.yaml" opencloud init || true
+    opencloud init || true
 fi
 
-# --- F) DEBUG & BYPASS ---
-log "--> DEBUG: Dumping generated config file (first 20 lines):"
-head -n 20 /data/opencloud.yaml || true
+# --- F) CONFIG PATCHING (APPEND METHODE) ---
+log "--> Patching config file (Appending missing IDs)..."
 
-log "--> RENAMING config file to force ENV variable usage..."
-# Wir benennen die Datei um. Wenn OpenCloud sie nicht findet, MUSS es die ENV-Vars nehmen.
-mv /data/opencloud.yaml /data/opencloud.yaml.bak || true
+# Wir prüfen, ob der Eintrag schon existiert, um ihn nicht doppelt reinzuschreiben
+if ! grep -q "storage_users_mount_id:" /data/opencloud.yaml; then
+    log "--> Appending Mount IDs to opencloud.yaml"
+    
+    # Wir fügen die globalen IDs hinzu
+    echo "" >> /data/opencloud.yaml
+    echo "# Manually appended by Add-on" >> /data/opencloud.yaml
+    echo "storage_users_mount_id: \"$MOUNT_ID_USERS\"" >> /data/opencloud.yaml
+    echo "storage_system_mount_id: \"$MOUNT_ID_SYSTEM\"" >> /data/opencloud.yaml
+    
+    # Wir fügen spezifische Gateway Config hinzu (YAML Einrückung beachten!)
+    echo "gateway:" >> /data/opencloud.yaml
+    echo "  storage_users_mount_id: \"$MOUNT_ID_USERS\"" >> /data/opencloud.yaml
+    echo "  storage_system_mount_id: \"$MOUNT_ID_SYSTEM\"" >> /data/opencloud.yaml
+else
+    log "--> Config already patched."
+fi
 
-log "--> Starting OpenCloud Server (ENV mode)..."
+log "--> Starting OpenCloud Server..."
 echo "------------------------------------------------"
 
-# Starten (ohne Config File Argument, rein über ENV)
+# Starten
 exec opencloud server
