@@ -1,39 +1,40 @@
 #!/bin/sh
 set -e
 
-echo "--> Starte OpenCloud Add-on (Split Storage Mode)..."
+echo "--> Starte OpenCloud Add-on (Immich-Style Compatibility)..."
 
-# --- 1. KONFIGURATION LESEN ---
+# --- CONFIG ---
 CONFIG_PATH=/data/options.json
 ADMIN_PASS=$(jq --raw-output '.admin_password' $CONFIG_PATH)
 OC_URL_VAL=$(jq --raw-output '.oc_url' $CONFIG_PATH)
 NAS_PATH_VAL=$(jq --raw-output '.data_path' $CONFIG_PATH)
 
-# --- 2. PFADE DEFINIEREN ---
+# --- PFADE ---
 export OC_CONFIG_DIR="/data/config"
 export OC_BASE_DATA_PATH="/data/data"
 NAS_BLOBS="$NAS_PATH_VAL/blobs"
 
-# --- 3. VALIDIERUNG NAS ---
+# --- CHECK ---
 if [ ! -d "$NAS_PATH_VAL" ]; then
-    echo "FEHLER: Der NAS-Pfad $NAS_PATH_VAL wurde nicht gefunden!"
+    echo "FEHLER: NAS-Pfad nicht gefunden! Ist das NAS in HA gemountet?"
     exit 1
 fi
 
-echo "--> Richte Ordnerstruktur ein..."
+# Ordnerstruktur erstellen (Lokal)
 mkdir -p "$OC_CONFIG_DIR"
 mkdir -p "$OC_BASE_DATA_PATH"
 
+# NAS Ordner erstellen (versuchen, falls nicht existiert)
 if [ ! -d "$NAS_BLOBS" ]; then
-    echo "--> Erstelle Blobs-Ordner auf dem NAS ($NAS_BLOBS)..."
-    mkdir -p "$NAS_BLOBS"
+    echo "--> Erstelle Blobs-Ordner auf dem NAS..."
+    mkdir -p "$NAS_BLOBS" || echo "WARNUNG: Konnte NAS-Ordner nicht erstellen (evtl. schon da?)"
 fi
 
-# Rechteversuch (Fehler ignorieren)
-chown -R 1000:1000 "$NAS_BLOBS" || true
+# WICHTIG: Wir machen KEIN chown auf dem NAS. 
+# Wir verlassen uns darauf, dass der Ordner auf Proxmox 'chmod 777' hat.
 
-# --- 4. UMGEBUNGSVARIABLEN SETZEN ---
-echo "--> Setze OpenCloud Environment..."
+# --- ENV ---
+echo "--> Setze Environment..."
 export OC_INSECURE=true
 export PROXY_TLS=false
 export PROXY_HTTP_ADDR="0.0.0.0:9200"
@@ -43,41 +44,35 @@ export OC_URL="$OC_URL_VAL"
 export OC_CONFIG_DIR=$OC_CONFIG_DIR
 export OC_BASE_DATA_PATH=$OC_BASE_DATA_PATH
 
-# --- 5. INITIALISIERUNG (FIX FÜR ABSTURZ) ---
+# --- INIT ---
+# Lokale Rechte fixen (das darf root immer)
 chown -R 1000:1000 /data
 
-# Wir prüfen grob auf Existenz, aber fangen Fehler ab
 if [ ! -f "$OC_CONFIG_DIR/ocis.yaml" ]; then
-    echo "--> Erstelle initiale Konfiguration..."
-    # WICHTIG: '|| true' verhindert den Absturz, falls init meckert
+    echo "--> Init OpenCloud..."
     su-exec 1000:1000 opencloud init || true
-else
-    echo "--> Konfiguration bereits vorhanden."
 fi
 
-# --- 6. SYMLINK LOGIK (FIX FÜR LEEREN NAS ORDNER) ---
-echo "--> Verlinke lokalen Storage zum NAS..."
+# --- SYMLINK ---
+echo "--> Verlinke Storage..."
 LOCAL_STORAGE_USERS="$OC_BASE_DATA_PATH/storage/users"
 LOCAL_BLOBS="$LOCAL_STORAGE_USERS/blobs"
 
-# Ordnerstruktur vorbereiten
 mkdir -p "$LOCAL_STORAGE_USERS"
 chown -R 1000:1000 "$OC_BASE_DATA_PATH"
 
-# Falls "blobs" lokal existiert und KEIN Link ist -> Weg damit!
+# Alten lokalen Ordner entfernen
 if [ -d "$LOCAL_BLOBS" ] && [ ! -L "$LOCAL_BLOBS" ]; then
-    echo "WARNUNG: Lokaler Blobs-Ordner gefunden. Lösche ihn für NAS-Link..."
+    echo "--> Entferne lokalen Blobs-Ordner für Link..."
     rm -rf "$LOCAL_BLOBS"
 fi
 
-# Symlink erstellen
+# Link setzen
 if [ ! -L "$LOCAL_BLOBS" ]; then
-    echo "--> Erstelle Symlink: Intern -> NAS..."
+    echo "--> Erstelle Link zu $NAS_BLOBS"
     ln -s "$NAS_BLOBS" "$LOCAL_BLOBS"
-    # Rechte des Links selbst anpassen (-h)
     chown -h 1000:1000 "$LOCAL_BLOBS"
 fi
 
-# --- 7. FINALER START ---
-echo "--> Starte OpenCloud Server..."
+echo "--> Starte Server..."
 exec su-exec 1000:1000 opencloud server
