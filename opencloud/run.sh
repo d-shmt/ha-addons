@@ -26,8 +26,8 @@ if [ ! -d "$STORAGE_PATH" ]; then
     exit 1
 fi
 
-# 3. SECRET MANAGEMENT
-# Wir erstellen Hilfsdateien im /data Ordner, damit die Secrets Neustarts überleben.
+# 3. SECRET & ID MANAGEMENT
+# Wir erstellen Hilfsdateien im /data Ordner, damit die Werte Neustarts überleben.
 
 # --- A) JWT SECRET ---
 JWT_SECRET_FILE="/data/oc_jwt_secret"
@@ -45,13 +45,22 @@ if [ ! -f "$TRANSFER_SECRET_FILE" ]; then
 fi
 export OC_TRANSFER_SECRET=$(cat "$TRANSFER_SECRET_FILE")
 
-# --- C) MACHINE AUTH SECRET (Neu) ---
+# --- C) MACHINE AUTH SECRET ---
 MACHINE_AUTH_FILE="/data/oc_machine_auth_secret"
 if [ ! -f "$MACHINE_AUTH_FILE" ]; then
     log "--> Generating new Machine Auth secret..."
     tr -dc A-Za-z0-9 </dev/urandom | head -c 32 > "$MACHINE_AUTH_FILE"
 fi
 export OC_MACHINE_AUTH_API_KEY=$(cat "$MACHINE_AUTH_FILE")
+
+# --- D) SYSTEM USER ID (Neu) ---
+# OpenCloud benötigt eine feste UUID für den System-User
+SYSTEM_USER_ID_FILE="/data/oc_system_user_id"
+if [ ! -f "$SYSTEM_USER_ID_FILE" ]; then
+    log "--> Generating new System User UUID..."
+    cat /proc/sys/kernel/random/uuid > "$SYSTEM_USER_ID_FILE"
+fi
+export OC_SYSTEM_USER_ID=$(cat "$SYSTEM_USER_ID_FILE")
 
 
 # 4. Environment Variablen setzen
